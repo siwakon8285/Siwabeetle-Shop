@@ -1,4 +1,4 @@
-const products = [
+const defaultProducts = [
     {
         id: 1,
         name: "ด้วงเฮอร์คิวลิส (เพศผู้)",
@@ -68,7 +68,7 @@ const products = [
         category: "larva",
         price: 250,
         image: "images/larva_stage_1.jpg",
-        stock: 4,
+        stock: 5,
         description: "ตัวอ่อนด้วงสามเขา ระยะที่ 1 พร้อมเข้าดักแด้"
     },
     {
@@ -154,6 +154,8 @@ const products = [
     },
 ];
 
+let products = JSON.parse(localStorage.getItem('products')) || defaultProducts;
+
 let cart = [];
 let userProfile = JSON.parse(sessionStorage.getItem('userProfile')) || null;
 const SHIPPING_FEE = 100;
@@ -176,6 +178,13 @@ const checkoutBtn = document.getElementById('checkout-btn');
 const copySummaryBtn = document.getElementById('copy-summary');
 const header = document.getElementById('main-header');
 const toastContainer = document.getElementById('toast-container');
+// Admin Elements
+const adminTrigger = document.getElementById('admin-trigger');
+const adminModal = document.getElementById('admin-modal');
+const closeAdmin = document.getElementById('close-admin');
+const adminProductList = document.getElementById('admin-product-list');
+const saveStockBtn = document.getElementById('save-stock-btn');
+const resetStockBtn = document.getElementById('reset-stock-btn');
 
 // Initialize
 function init() {
@@ -184,6 +193,60 @@ function init() {
     updateLoginStatus();
     setupEventListeners();
 }
+// ... [Existing helper functions like updateLoginStatus, renderProducts, checkLogin, cart logic] ...
+// (We keep the rest of the file largely the same, just adding new functions)
+
+function renderAdminProducts() {
+    adminProductList.innerHTML = '';
+    products.forEach(product => {
+        const item = document.createElement('div');
+        item.className = 'admin-item';
+        item.innerHTML = `
+            <div class="admin-item-left">
+                <img src="${product.image}" alt="${product.name}">
+                <div class="admin-item-info">
+                    <h4>${product.name}</h4>
+                    <span>คงเหลือปัจจุบัน: ${product.stock}</span>
+                </div>
+            </div>
+            <div class="admin-stock-input">
+                <input type="number" id="stock-input-${product.id}" value="${product.stock}" min="0">
+            </div>
+        `;
+        adminProductList.appendChild(item);
+    });
+}
+
+// ... [Existing Cart Logic Functions] ...
+
+// Event Listeners
+function setupEventListeners() {
+    // ... [Existing Listeners] ...
+
+    // Admin Modal - Re-select to be safe (Cleaned up: Handled by inline onclick now)
+    // We keep existing listeners for other parts, but remove the ones we moved to global functions
+
+    // Window Click to Close Modals (Keep this one)
+    window.addEventListener('click', (e) => {
+        if (e.target === cartModal) closeModal(cartModal);
+        if (e.target === loginModal) closeModal(loginModal);
+        if (e.target === document.getElementById('admin-modal')) {
+            window.closeAdminModal();
+        }
+    });
+
+    window.addEventListener('click', (e) => {
+        if (e.target === cartModal) closeModal(cartModal);
+        if (e.target === loginModal) closeModal(loginModal);
+        if (e.target === adminModal) {
+            adminModal.classList.remove('active');
+            document.body.style.overflow = '';
+        }
+    });
+
+    // ... [Existing Listeners continued] ...
+}
+
 
 function updateLoginStatus() {
     if (userProfile) {
@@ -204,7 +267,14 @@ function renderProducts(filter) {
         : products.filter(p => p.category === filter);
 
     filteredProducts.forEach(product => {
-        const isOut = product.stock === 0;
+        // Calculate display stock (Actual Stock - In Cart)
+        // This ensures the user sees the numbers go down while shopping
+        const cartItem = cart.find(item => item.id === product.id);
+        const qtyInCart = cartItem ? cartItem.qty : 0;
+        const availableStock = product.stock - qtyInCart;
+
+        const isOut = availableStock <= 0;
+
         const productCard = document.createElement('div');
         productCard.className = 'product-card dark-glass';
         productCard.innerHTML = `
@@ -215,7 +285,7 @@ function renderProducts(filter) {
             <div class="product-info">
                 <div class="product-category">${product.category}</div>
                 <h3 class="product-name">${product.name}</h3>
-                <div class="product-stock">คงเหลือ: ${product.stock} ชิ้น</div>
+                <div class="product-stock">คงเหลือ: ${availableStock} ชิ้น</div>
                 <div class="product-price-row">
                     <span class="product-price">${product.price.toLocaleString()} ฿</span>
                     ${!isOut ? `
@@ -240,45 +310,82 @@ function checkLogin() {
     return true;
 }
 
+// Helper to update specific product card UI
+function updateProductCardStock(productId) {
+    const product = products.find(p => p.id === productId);
+    const cartItem = cart.find(item => item.id === productId);
+    const qtyInCart = cartItem ? cartItem.qty : 0;
+    const availableStock = product.stock - qtyInCart;
+
+    const buttons = document.querySelectorAll(`button[onclick="addToCart(${productId})"]`);
+    buttons.forEach(btn => {
+        const card = btn.closest('.product-card');
+        if (card) {
+            const stockDisplay = card.querySelector('.product-stock');
+            if (stockDisplay) {
+                stockDisplay.innerText = `คงเหลือ: ${Math.max(0, availableStock)} ชิ้น`;
+            }
+            if (availableStock <= 0) {
+                const currentCategory = document.querySelector('.filter-btn.active').dataset.category;
+                renderProducts(currentCategory);
+            }
+        }
+    });
+}
+
 // Cart Logic
 window.addToCart = function (productId) {
     if (!checkLogin()) return;
 
     const product = products.find(p => p.id === productId);
     const existingItem = cart.find(item => item.id === productId);
+    const currentQty = existingItem ? existingItem.qty : 0;
 
-    if (existingItem) {
-        if (existingItem.qty < product.stock) {
+    if (currentQty < product.stock) {
+        if (existingItem) {
             existingItem.qty++;
-            showToast(`เพิ่ม ${product.name} แล้ว!`);
         } else {
-            showToast(`ขออภัย สินค้าในสต็อกไม่พอครับ`, "error");
+            cart.push({ ...product, qty: 1 });
         }
-    } else {
-        cart.push({ ...product, qty: 1 });
-        showToast(`เพิ่ม ${product.name} ลงตะกร้าแล้ว!`);
-    }
 
-    updateCartUI();
+        showToast(`เพิ่ม ${product.name} แล้ว!`);
+        updateCartUI();
+        updateProductCardStock(productId); // Update display only
+    } else {
+        showToast(`ขออภัย สินค้าหมดแล้วครับ`, "error");
+    }
 };
 
 function removeFromCart(productId) {
     cart = cart.filter(item => item.id !== productId);
     updateCartUI();
+    updateProductCardStock(productId); // Restore display stock
 }
 
 function updateQty(productId, delta) {
     const item = cart.find(i => i.id === productId);
     const product = products.find(p => p.id === productId);
 
-    if (item) {
+    if (item && product) {
         const newQty = item.qty + delta;
-        if (newQty > 0 && newQty <= product.stock) {
+
+        if (delta > 0) {
+            if (newQty <= product.stock) {
+                item.qty = newQty;
+            } else {
+                showToast(`สินค้าหมดแล้ว`, "error");
+                return;
+            }
+        } else {
             item.qty = newQty;
-        } else if (newQty === 0) {
-            removeFromCart(productId);
         }
+
+        if (item.qty <= 0) {
+            cart = cart.filter(i => i.id !== productId);
+        }
+
         updateCartUI();
+        updateProductCardStock(productId);
     }
 }
 
@@ -345,10 +452,12 @@ function setupEventListeners() {
         document.body.style.overflow = 'hidden';
     });
 
-    closeCart.addEventListener('click', () => {
-        cartModal.classList.remove('active');
+    const closeModal = (modal) => {
+        modal.classList.remove('active');
         document.body.style.overflow = '';
-    });
+    };
+
+    closeCart.addEventListener('click', () => closeModal(cartModal));
 
     // Registration Form
     registrationForm.addEventListener('submit', (e) => {
@@ -360,8 +469,7 @@ function setupEventListeners() {
             note: document.getElementById('user-note').value
         };
         sessionStorage.setItem('userProfile', JSON.stringify(userProfile));
-        loginModal.classList.remove('active');
-        document.body.style.overflow = '';
+        closeModal(loginModal);
         showToast("กรอกเสร็จสิ้นพร้อม shopต่อได้เลย!");
         updateLoginStatus();
     });
@@ -377,20 +485,11 @@ function setupEventListeners() {
         document.body.style.overflow = 'hidden';
     });
 
-    closeLogin.addEventListener('click', () => {
-        loginModal.classList.remove('active');
-        document.body.style.overflow = '';
-    });
+    closeLogin.addEventListener('click', () => closeModal(loginModal));
 
     window.addEventListener('click', (e) => {
-        if (e.target === cartModal) {
-            cartModal.classList.remove('active');
-            document.body.style.overflow = '';
-        }
-        if (e.target === loginModal) {
-            loginModal.classList.remove('active');
-            document.body.style.overflow = '';
-        }
+        if (e.target === cartModal) closeModal(cartModal);
+        if (e.target === loginModal) closeModal(loginModal);
     });
 
     // Copy Summary
@@ -401,7 +500,7 @@ function setupEventListeners() {
             return;
         }
 
-        let summary = "📦 รายการสั่งซื้อ Siwabeetle Shop:\n";
+        let summary = "📦 รายการสั่งซื้อ Siwabeetles Shop:\n";
         summary += `👤 ลูกค้า: ${userProfile.name}\n`;
         summary += `📞 เบอร์โทร: ${userProfile.phone}\n`;
         summary += `📍 ที่อยู่: ${userProfile.address}\n`;
@@ -426,26 +525,124 @@ function setupEventListeners() {
     // Checkout (Redirect to FB)
     checkoutBtn.addEventListener('click', () => {
         if (!checkLogin()) return;
-        window.open('https://www.facebook.com/siwakorn.bunde.2024', '_blank');
+
+        if (cart.length === 0) {
+            showToast("ตะกร้าว่างอยู่ครับ", "error");
+            return;
+        }
+
+        // Deduct Stock on Checkout
+        cart.forEach(cartItem => {
+            const product = products.find(p => p.id === cartItem.id);
+            if (product) {
+                product.stock = Math.max(0, product.stock - cartItem.qty);
+            }
+        });
+
+        // Save updated stock to localStorage
+        localStorage.setItem('products', JSON.stringify(products));
+
+        // Clear Cart
+        cart = [];
+        updateCartUI();
+
+        // Re-render to show new stock level
+        const currentCategory = document.querySelector('.filter-btn.active').dataset.category;
+        renderProducts(currentCategory);
+
+        showToast("สั่งซื้อสำเร็จ! กำลังไปที่ Facebook...");
+
+        // Redirect to FB after a short delay
+        setTimeout(() => {
+            window.open('https://www.facebook.com/siwakorn.bunde.2024', '_blank');
+        }, 1500);
     });
 }
 
 function showToast(message, type = "success") {
     const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.style.backgroundColor = type === "error" ? "#ff4d4d" : "var(--dappled-gold)";
-    toast.style.color = type === "error" ? "white" : "var(--deep-forest)";
-    toast.innerText = message;
+    toast.className = `toast ${type}`;
+
+    // Icon based on type
+    const icon = type === "error"
+        ? '<i class="fa-solid fa-circle-exclamation"></i>'
+        : '<i class="fa-solid fa-circle-check"></i>';
+
+    toast.innerHTML = `${icon}<span>${message}</span>`;
 
     toastContainer.appendChild(toast);
 
+    // Remove after 3 seconds with fade out
     setTimeout(() => {
-        toast.remove();
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-20px)';
+        toast.style.transition = 'all 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
     }, 3000);
 }
 
-// Global functions for inline onclick handlers
+// Global function for Admin Modal
+window.openAdminModal = function () {
+    // Security Check at Entrance
+    const password = prompt("🔒 กรุณาใส่รหัสลับแอดมิน เพื่อเข้าสู่เมนูจัดการสต็อก:");
+
+    if (password === "admin888") {
+        console.log("Access Granted");
+        renderAdminProducts();
+        const adminModal = document.getElementById('admin-modal');
+        if (adminModal) {
+            adminModal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+            showToast("ยินดีต้อนรับแอดมิน! 🛠️", "success");
+        } else {
+            console.error("Admin modal element not found!");
+        }
+    } else if (password !== null) {
+        showToast("รหัสผ่านไม่ถูกต้อง! ห้ามเข้าครับ", "error");
+    }
+};
+
+window.closeAdminModal = function () {
+    const adminModal = document.getElementById('admin-modal');
+    if (adminModal) {
+        adminModal.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+};
+
+
+
+window.saveStock = function () {
+    console.log("Save Stock Clicked");
+    products.forEach(product => {
+        const input = document.getElementById(`stock-input-${product.id}`);
+        if (input) {
+            product.stock = parseInt(input.value) || 0;
+        }
+    });
+
+    // Save to localStorage
+    localStorage.setItem('products', JSON.stringify(products));
+
+    // Update UI
+    const currentCategory = document.querySelector('.filter-btn.active').dataset.category;
+    renderProducts(currentCategory);
+
+    // Close Modal
+    window.closeAdminModal();
+
+    showToast("บันทึกสต็อกเรียบร้อยแล้ว!");
+};
+
+// Global for inline onclick
 window.updateQty = updateQty;
 window.removeFromCart = removeFromCart;
+window.addToCart = addToCart;
 
-init();
+// Ensure init runs
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
+}
+

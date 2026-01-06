@@ -25,7 +25,7 @@
         <div class="container nav-content">
             <a href="#" class="logo">
                 <i class="fa-solid fa-beetle"></i>
-                <span>SIWABEETLE</span>
+                <span>SIWABEETLES</span>
             </a>
             <div class="nav-actions">
                 <button class="nav-btn" id="login-trigger" title="ข้อมูลผู้ส่ง">
@@ -41,9 +41,7 @@
 
     <main>
         <section class="hero">
-            <div class="hero-bg">
-                <img src="images/hero-bg-v2.jpg" alt="Beetle Jungle">
-            </div>
+
             <div class="hero-content">
                 <h1>สัมผัสความงามแห่งธรรมชาติ</h1>
                 <p>แหล่งรวบรวมด้วงสายพันธุ์หายาก และอุปกรณ์การเลี้ยงครบวงจร</p>
@@ -104,6 +102,7 @@
                     <span>ยอดรวมทั้งหมด:</span>
                     <span><span id="cart-total-amount">0</span> บาท</span>
                 </div>
+                <p class="cart-note">* กรุณากดคัดลอกรายการสินค้าก่อนกดสั่งซื้อทาง Facebook</p>
                 <button class="btn-primary checkout-btn" id="checkout-btn">
                     <i class="fa-brands fa-facebook-messenger"></i> สั่งซื้อทาง Facebook
                 </button>
@@ -145,8 +144,30 @@
         </div>
     </div>
 
+    <!-- Admin Modal -->
+    <div class="modal" id="admin-modal">
+        <div class="glass registration-form" style="max-width: 600px; max-height: 90vh; overflow-y: auto;">
+            <div class="cart-header">
+                <h2>จัดการสต็อกสินค้า</h2>
+                <button class="close-cart" id="close-admin" onclick="closeAdminModal()">&times;</button>
+            </div>
+            <div id="admin-product-list" class="admin-product-list">
+                <!-- Stock inputs will be injected here -->
+            </div>
+            <div class="cart-footer">
+                <button class="btn-primary" id="save-stock-btn" onclick="saveStock()"
+                    style="width: 100%;">บันทึกข้อมูล</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Container -->
     <div id="toast-container"></div>
+
+    <!-- Admin Trigger in Footer -->
+    <button id="admin-trigger" onclick="openAdminModal()" title="จัดการสต็อก">
+        <i class="fa-solid fa-gear"></i>
+    </button>
 
     <script src="app.js"></script>
 </body>
