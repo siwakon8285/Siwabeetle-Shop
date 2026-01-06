@@ -642,17 +642,27 @@ header.scrolled {
 /* Registration Form Premium Styles */
 .registration-form {
     width: 95%;
-    max-width: 650px;
+    max-width: 550px;
     background: rgba(255, 255, 255, 0.03);
     /* More transparent */
     backdrop-filter: blur(25px);
     -webkit-backdrop-filter: blur(25px);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 32px;
-    padding: 50px;
+    padding: 40px;
     box-shadow: 0 40px 100px rgba(0, 0, 0, 0.6);
     margin: auto;
     position: relative;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+@media (max-width: 768px) {
+    .registration-form {
+        padding: 30px 20px;
+        width: 90%;
+        margin-top: 20px;
+    }
 }
 
 .registration-form .close-cart,
