@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Siwabeetle Shop | ร้านขายด้วงและอุปกรณ์คุณภาพ</title>
+    <meta name="description" content="จำหน่ายด้วงกว่าง ด้วงคีม ตัวอ่อน และอุปกรณ์การเลี้ยงคุณภาพสูง ในราคาเป็นกันเอง">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&family=Prompt:wght@200;300;400;500;600;700&display=swap"
+        rel="stylesheet">
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <link rel="stylesheet" href="index.css">
+</head>
+
+<body>
+    <header id="main-header">
+        <div class="container nav-content">
+            <a href="#" class="logo">
+                <i class="fa-solid fa-beetle"></i>
+                <span>SIWABEETLE</span>
+            </a>
+            <div class="nav-actions">
+                <button class="nav-btn" id="login-trigger" title="ข้อมูลผู้ส่ง">
+                    <i class="fa-solid fa-user"></i>
+                </button>
+                <button class="cart-icon-btn" id="cart-trigger">
+                    <i class="fa-solid fa-basket-shopping"></i>
+                    <span class="cart-badge" id="cart-count">0</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <section class="hero">
+            <div class="hero-bg">
+                <img src="images/hero-bg-v2.jpg" alt="Beetle Jungle">
+            </div>
+            <div class="hero-content">
+                <h1>สัมผัสความงามแห่งธรรมชาติ</h1>
+                <p>แหล่งรวบรวมด้วงสายพันธุ์หายาก และอุปกรณ์การเลี้ยงครบวงจร</p>
+                <a href="#shop" class="btn-primary">เลือกชมสินค้า</a>
+            </div>
+        </section>
+
+        <section class="container" id="shop">
+            <div class="filters" id="category-filters">
+                <button class="filter-btn active" data-category="all">ทั้งหมด</button>
+                <button class="filter-btn" data-category="adult">เต็มวัย</button>
+                <button class="filter-btn" data-category="larva">ตัวอ่อน</button>
+                <button class="filter-btn" data-category="set">ชุดเซ็ต</button>
+                <button class="filter-btn" data-category="accessory">อุปกรณ์</button>
+            </div>
+
+            <div class="product-grid" id="product-container">
+                <!-- Products will be injected here by JS -->
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <div class="footer-logo">
+                <i class="fa-solid fa-beetle"></i> SIWABEETLE SHOP
+            </div>
+            <p>
+                <i class="fa-brands fa-facebook"></i> Facebook: <a href="https://www.facebook.com/siwakorn.bunde.2024"
+                    target="_blank" style="color: var(--light-moss); text-decoration: none;">Siwakorn Bunde</a>
+            </p>
+            <div class="copyright">
+                &copy; 2026 Siwabeetle Shop. All rights reserved.
+            </div>
+        </div>
+    </footer>
+
+    <!-- Cart Modal -->
+    <div class="modal" id="cart-modal">
+        <div class="cart-sidebar">
+            <div class="cart-header">
+                <h2>ตะกร้าของคุณ</h2>
+                <button class="close-cart" id="close-cart">&times;</button>
+            </div>
+            <div class="cart-items" id="cart-items-container">
+                <!-- Cart items will be injected here -->
+            </div>
+            <div class="cart-footer">
+                <div class="cart-summary-row">
+                    <span>ยอดรวมสินค้า:</span>
+                    <span><span id="cart-subtotal">0</span> บาท</span>
+                </div>
+                <div class="cart-summary-row shipping-row">
+                    <span>ค่าจัดส่ง:</span>
+                    <span>100 บาท</span>
+                </div>
+                <div class="cart-total">
+                    <span>ยอดรวมทั้งหมด:</span>
+                    <span><span id="cart-total-amount">0</span> บาท</span>
+                </div>
+                <button class="btn-primary checkout-btn" id="checkout-btn">
+                    <i class="fa-brands fa-facebook-messenger"></i> สั่งซื้อทาง Facebook
+                </button>
+                <button class="filter-btn" id="copy-summary" style="width: 100%;">
+                    <i class="fa-solid fa-copy"></i> คัดลอกรายการสินค้า
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Registration Modal -->
+    <div class="modal" id="login-modal">
+        <div class="glass registration-form">
+            <div class="cart-header">
+                <h2>ข้อมูลสำหรับจัดส่ง</h2>
+                <button class="close-cart" id="close-login">&times;</button>
+            </div>
+            <form id="registration-form">
+                <div class="form-group">
+                    <label for="user-name">ชื่อ-นามสกุล <span class="required">*</span></label>
+                    <input type="text" id="user-name" required placeholder="ชื่อจริง-นามสกุลของผู้รับ">
+                </div>
+                <div class="form-group">
+                    <label for="user-phone">เบอร์โทรศัพท์ <span class="required">*</span></label>
+                    <input type="tel" id="user-phone" required placeholder="08x-xxx-xxxx">
+                </div>
+                <div class="form-group">
+                    <label for="user-address">ที่อยู่จัดส่ง <span class="required">*</span></label>
+                    <textarea id="user-address" required
+                        placeholder="บ้านเลขที่ ถนน แขวง/ตำบล เขต/อำเภอ จังหวัด รหัสไปรษณีย์"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="user-note">รายละเอียดเพิ่มเติม (ถ้ามี)</label>
+                    <textarea id="user-note"
+                        placeholder="เช่น ฝากข้อความถึงร้านหรือต้องการแจ้งข้อมูลเพิ่มเติม"></textarea>
+                </div>
+                <button type="submit" class="btn-primary" style="width: 100%; margin-top: 10px;">บันทึกข้อมูล</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container"></div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
