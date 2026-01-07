@@ -154,7 +154,25 @@ const defaultProducts = [
     },
 ];
 
-let products = JSON.parse(localStorage.getItem('products')) || defaultProducts;
+
+// Logic to merge static data (from code) with dynamic data (stock from storage)
+let storedProducts = JSON.parse(localStorage.getItem('products')) || [];
+let products = defaultProducts.map(defProd => {
+    // If we have stored data, try to find the preserve stock
+    if (storedProducts.length > 0) {
+        const stored = storedProducts.find(p => p.id === defProd.id);
+        if (stored) {
+            // Use the price/name/image from code (defProd), but stock from storage (stored)
+            return {
+                ...defProd,
+                stock: stored.stock
+            };
+        }
+    }
+    // If not in storage, use default
+    return defProd;
+});
+
 
 let cart = [];
 let userProfile = JSON.parse(sessionStorage.getItem('userProfile')) || null;
@@ -523,41 +541,146 @@ function setupEventListeners() {
     });
 
     // Checkout (Redirect to FB)
-    checkoutBtn.addEventListener('click', () => {
-        if (!checkLogin()) return;
+    // checkoutBtn.addEventListener('click', () => {
+    //     if (!checkLogin()) return;
 
-        if (cart.length === 0) {
-            showToast("ตะกร้าว่างอยู่ครับ", "error");
-            return;
-        }
+    //     if (cart.length === 0) {
+    //         showToast("ตะกร้าว่างอยู่ครับ", "error");
+    //         return;
+    //     }
 
-        // Deduct Stock on Checkout
-        cart.forEach(cartItem => {
-            const product = products.find(p => p.id === cartItem.id);
-            if (product) {
-                product.stock = Math.max(0, product.stock - cartItem.qty);
-            }
-        });
+    //     // Deduct Stock on Checkout
+    //     cart.forEach(cartItem => {
+    //         const product = products.find(p => p.id === cartItem.id);
+    //         if (product) {
+    //             product.stock = Math.max(0, product.stock - cartItem.qty);
+    //         }
+    //     });
 
-        // Save updated stock to localStorage
-        localStorage.setItem('products', JSON.stringify(products));
+    //     // Save updated stock to localStorage
+    //     localStorage.setItem('products', JSON.stringify(products));
 
-        // Clear Cart
-        cart = [];
-        updateCartUI();
+    //     // Clear Cart
+    //     cart = [];
+    //     updateCartUI();
 
-        // Re-render to show new stock level
-        const currentCategory = document.querySelector('.filter-btn.active').dataset.category;
-        renderProducts(currentCategory);
+    //     // Re-render to show new stock level
+    //     const currentCategory = document.querySelector('.filter-btn.active').dataset.category;
+    //     renderProducts(currentCategory);
 
-        showToast("สั่งซื้อสำเร็จ! กำลังไปที่ Facebook...");
+    //     showToast("สั่งซื้อสำเร็จ! กำลังไปที่ Facebook...");
 
-        // Redirect to FB after a short delay
-        setTimeout(() => {
-            window.open('https://www.facebook.com/siwakorn.bunde.2024', '_blank');
-        }, 1500);
-    });
+    //     // Redirect to FB after a short delay
+    //     setTimeout(() => {
+    //         window.open('https://www.facebook.com/siwakorn.bunde.2024', '_blank');
+    //     }, 1500);
+    // });
 }
+
+function openPayment() {
+
+    // คำนวณยอดรวมสินค้า
+    const subtotal = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+
+    // รวมค่าส่ง
+    const cartTotal = subtotal + SHIPPING_FEE;
+
+    // แสดงผลหน้า Modal
+    document.getElementById("total-amount").textContent = cartTotal.toFixed(2);
+
+    document.getElementById("payment-modal").style.display = "flex";
+}
+
+function closePayment() {
+    document.getElementById("payment-modal").style.display = "none";
+}
+
+function confirmPayment() {
+
+    if (!checkLogin()) return;
+
+    if (cart.length === 0) {
+        showToast("ตะกร้าว่างอยู่ครับ", "error");
+        return;
+    }
+
+    // 1. ตัดสต็อกสินค้า
+    cart.forEach(cartItem => {
+        const product = products.find(p => p.id === cartItem.id);
+        if (product) {
+            product.stock = Math.max(0, product.stock - cartItem.qty);
+        }
+    });
+
+    // 2. บันทึกสต็อกที่อัปเดตลง localStorage
+    localStorage.setItem('products', JSON.stringify(products));
+
+    // สร้างข้อความสรุปรายการสั่งซื้อ
+    let summary = "📦 รายการสั่งซื้อ Siwabeetles Shop:\n";
+    summary += `👤 ลูกค้า: ${userProfile.name}\n`;
+    summary += `📞 เบอร์โทร: ${userProfile.phone}\n`;
+    summary += `📍 ที่อยู่: ${userProfile.address}\n`;
+    if (userProfile.note) summary += `✍️ เพิ่มเติม: ${userProfile.note}\n`;
+    summary += "------------------\n";
+
+    cart.forEach(item => {
+        summary += `- ${item.name} x ${item.qty} = ${(item.price * item.qty).toLocaleString()} ฿\n`;
+    });
+
+    const subtotal = cart.reduce((acc, item) => acc + (item.price * item.qty), 0);
+    summary += `------------------\n`;
+    summary += `🛒 ยอดรวมสินค้า: ${subtotal.toLocaleString()} บาท\n`;
+    summary += `🚚 ค่าจัดส่ง: ${SHIPPING_FEE} บาท\n`;
+    summary += `💰 ยอดรวมทั้งสิ้น: ${(subtotal + SHIPPING_FEE).toLocaleString()} บาท\n\n`;
+    summary += "✅ ได้ชำระเงินเรียบร้อยแล้ว (อย่าลืมแนบสลิปโอนด้วยน้า)";
+
+    // เปิด Facebook Profile
+    const facebookUrl = "https://www.facebook.com/siwakorn.bunde.2024?locale=th_TH";
+
+    // คัดลอกข้อความไปยัง Clipboard
+    navigator.clipboard.writeText(summary).then(() => {
+        showToast("คัดลอกรายการแล้ว กำลังเปิด Facebook...");
+    }).catch(() => {
+        showToast("กำลังเปิด Facebook...");
+    });
+
+    // เปิด Facebook ในแท็บใหม่
+    setTimeout(() => {
+        window.open(facebookUrl, '_blank');
+    }, 1000);
+
+    // ปิด Modal
+    closePayment();
+
+    // 3. ล้างตะกร้าและอัปเดตหน้าจอทันที
+    cart = [];
+    updateCartUI();
+    const currentCategory = document.querySelector('.filter-btn.active')?.dataset.category || 'all';
+    renderProducts(currentCategory);
+}
+
+function downloadQR() {
+    // Get the QR image element
+    const qrImage = document.querySelector('.promptpay-qr');
+
+    if (!qrImage) {
+        showToast("ไม่พบรูป QR Code", "error");
+        return;
+    }
+
+    // Create a temporary link element
+    const link = document.createElement('a');
+    link.href = qrImage.src;
+    link.download = 'PromptPay-QR-Siwabeetle.jpg';
+
+    // Trigger download
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    showToast("กำลังดาวน์โหลดรูป QR Code...");
+}
+
 
 function showToast(message, type = "success") {
     const toast = document.createElement('div');

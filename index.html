@@ -102,13 +102,10 @@
                     <span>ยอดรวมทั้งหมด:</span>
                     <span><span id="cart-total-amount">0</span> บาท</span>
                 </div>
-                <p class="cart-note">* กรุณากดคัดลอกรายการสินค้าก่อนกดสั่งซื้อทาง Facebook</p>
-                <button class="btn-primary checkout-btn" id="checkout-btn">
-                    <i class="fa-brands fa-facebook-messenger"></i> สั่งซื้อทาง Facebook
+                <button class="btn-primary checkout-btn" onclick="openPayment()">
+                    <i class="fa-solid fa-qrcode"></i> ชำระเงินด้วย PromptPay
                 </button>
-                <button class="filter-btn" id="copy-summary" style="width: 100%;">
-                    <i class="fa-solid fa-copy"></i> คัดลอกรายการสินค้า
-                </button>
+
             </div>
         </div>
     </div>
@@ -169,7 +166,44 @@
         <i class="fa-solid fa-gear"></i>
     </button>
 
+    <div class="modal" id="payment-modal">
+        <div class="glass registration-form">
+
+            <div class="cart-header">
+                <h2>ชำระเงินด้วย PromptPay</h2>
+                <button class="close-cart" onclick="closePayment()">×</button>
+            </div>
+
+            <img src="images/04e5eb92-d450-422e-b525-4149d8d04dd8.jpg" alt="PromptPay QR" class="promptpay-qr" />
+            <img id="qr-image" class="qr-img">
+
+            <p class="payment-name">
+                ชื่อบัญชี: นายศิวกร บุณดี (PromptPay)
+            </p>
+
+            <p class="payment-amount">
+                ยอดชำระทั้งหมด:
+                <span id="total-amount"></span> บาท
+            </p>
+
+            <div class="payment-warning">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                <span>กรุณาชำระยอดเงินด้วย PromptPay ให้เรียบร้อยก่อนกดยืนยันการชำระเงิน</span>
+            </div>
+
+            <button class="filter-btn" style="width:100%; margin-top:15px" onclick="downloadQR()">
+                <i class="fa-solid fa-download"></i> บันทึกรูป QR Code
+            </button>
+
+            <button class="btn-primary" style="width:100%; margin-top:15px" onclick="confirmPayment()">
+                ยืนยันการชำระเงินที่ Facebook
+            </button>
+
+        </div>
+    </div>
+
     <script src="app.js"></script>
+
 </body>
 
 </html>

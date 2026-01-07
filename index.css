@@ -574,6 +574,33 @@ header.scrolled {
     align-items: center;
 }
 
+.payment-amount {
+    font-size: 18px;
+    font-weight: 600;
+    margin-top: 5px;
+    text-align: center;
+}
+
+.payment-warning {
+    background: rgba(255, 183, 3, 0.1);
+    border: 1px solid rgba(255, 183, 3, 0.3);
+    color: var(--dappled-gold);
+    padding: 12px;
+    border-radius: 12px;
+    margin-top: 15px;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    line-height: 1.4;
+}
+
+.payment-warning i {
+    font-size: 1.2rem;
+    flex-shrink: 0;
+}
+
+
 .cart-item-img {
     width: 80px;
     height: 80px;
@@ -941,4 +968,58 @@ footer {
     outline: none;
     box-shadow: 0 0 10px rgba(116, 198, 157, 0.3);
     background: rgba(0, 0, 0, 0.8);
+}
+
+
+.qr-img {
+    width: 220px;
+    height: auto;
+    border-radius: 10px;
+}
+
+/* Payment Modal Specific Overrides */
+#payment-modal .registration-form {
+    max-width: 400px;
+    /* More compact width */
+    padding: 30px;
+}
+
+.promptpay-qr {
+    display: block;
+    width: 100%;
+    max-width: 250px;
+    margin: 0 auto 20px;
+    border-radius: 12px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
+#payment-modal h2 {
+    font-size: 1.5rem;
+    text-align: center;
+}
+
+#payment-modal .payment-name {
+    text-align: center;
+    color: var(--light-moss);
+    font-size: 0.95rem;
+    margin-bottom: 10px;
+}
+
+#payment-modal p {
+    text-align: center;
+}
+
+#slip-upload {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px dashed var(--light-moss);
+    padding: 10px;
+    border-radius: 10px;
+    width: 100%;
+    color: var(--white);
+    margin-top: 5px;
+    cursor: pointer;
+}
+
+#slip-upload:hover {
+    background: rgba(255, 255, 255, 0.1);
 }
