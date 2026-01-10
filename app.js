@@ -155,23 +155,65 @@ const defaultProducts = [
 ];
 
 
-// Logic to merge static data (from code) with dynamic data (stock from storage)
-let storedProducts = JSON.parse(localStorage.getItem('products')) || [];
-let products = defaultProducts.map(defProd => {
-    // If we have stored data, try to find the preserve stock
-    if (storedProducts.length > 0) {
-        const stored = storedProducts.find(p => p.id === defProd.id);
-        if (stored) {
-            // Use the price/name/image from code (defProd), but stock from storage (stored)
-            return {
-                ...defProd,
-                stock: stored.stock
-            };
-        }
+// --- Firebase Integration ---
+// กรุณานำ Config ของคุณจาก Firebase Console มาใส่ที่นี่
+const firebaseConfig = {
+    apiKey: "AIzaSyDbFDX10BBTUXt8kqXZDbVHzN-ls_1CL0Q",
+    authDomain: "siwabeetle-shop.firebaseapp.com",
+    databaseURL: "https://siwabeetle-shop-default-rtdb.asia-southeast1.firebasedatabase.app/",
+    projectId: "siwabeetle-shop",
+    storageBucket: "siwabeetle-shop.firebasestorage.app",
+    messagingSenderId: "452787644162",
+    appId: "1:452787644162:web:34a8051ed6c000725caa2d"
+};
+
+// ตรวจสอบว่ามีการใส่ Config หรือยัง
+const isFirebaseConfigured = firebaseConfig.apiKey !== "AIzaSy...";
+
+if (isFirebaseConfigured) {
+    firebase.initializeApp(firebaseConfig);
+}
+
+const database = isFirebaseConfigured ? firebase.database() : null;
+
+// ข้อมูลสินค้าที่ใช้งานในแอป (เริ่มต้นด้วย default)
+let products = [...defaultProducts];
+
+// ฟังก์ชันสำหรับดึงและซิงค์ข้อมูลจาก Firebase
+function syncProductsWithFirebase() {
+    if (!database) {
+        console.warn("Firebase is not configured yet. Using local data.");
+        return;
     }
-    // If not in storage, use default
-    return defProd;
-});
+
+    const productsRef = database.ref('products');
+
+    // โหลดข้อมูลครั้งแรกและอัปเดตอัตโนมัติเมื่อมีการเปลี่ยนแปลง (Real-time)
+    productsRef.on('value', (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+            // รวมข้อมูลจากฐานข้อมูล (สต็อก) เข้ากับข้อมูลหลัก (ชื่อ/ราคา/รูป)
+            products = defaultProducts.map(defProd => {
+                const cloudData = data.find(p => p.id === defProd.id);
+                return {
+                    ...defProd,
+                    stock: cloudData ? cloudData.stock : defProd.stock
+                };
+            });
+
+            // อัปเดต UI หลังจากข้อมูลมาแล้ว
+            const activeBtn = document.querySelector('.filter-btn.active');
+            const currentCategory = activeBtn ? activeBtn.dataset.category : 'all';
+            renderProducts(currentCategory);
+        } else {
+            // ถ้าไม่มีข้อมูลใน Firebase (ครั้งแรก) ให้ส่งข้อมูลตั้งต้นขึ้นไป
+            productsRef.set(defaultProducts.map(p => ({ id: p.id, stock: p.stock })));
+        }
+    });
+}
+
+// เริ่มการซิงค์
+syncProductsWithFirebase();
 
 
 let cart = [];
@@ -595,6 +637,20 @@ function closePayment() {
     document.getElementById("payment-modal").style.display = "none";
 }
 
+// ฟังก์ชันสำหรับบันทึกสต็อกกลับไปยัง Firebase
+function saveProductsToFirebase() {
+    if (!database) {
+        localStorage.setItem('products', JSON.stringify(products));
+        return;
+    }
+
+    // บันทึกเฉพาะ id และสต็อก
+    const stockData = products.map(p => ({ id: p.id, stock: p.stock }));
+    database.ref('products').set(stockData)
+        .then(() => console.log("Stock synced to Firebase"))
+        .catch(err => console.error("Firebase Sync Error:", err));
+}
+
 function confirmPayment() {
 
     if (!checkLogin()) return;
@@ -612,8 +668,8 @@ function confirmPayment() {
         }
     });
 
-    // 2. บันทึกสต็อกที่อัปเดตลง localStorage
-    localStorage.setItem('products', JSON.stringify(products));
+    // 2. บันทึกสต็อกที่อัปเดตลง Firebase (แทน localStorage)
+    saveProductsToFirebase();
 
     // สร้างข้อความสรุปรายการสั่งซื้อ
     let summary = "📦 รายการสั่งซื้อ Siwabeetles Shop:\n";
@@ -744,8 +800,8 @@ window.saveStock = function () {
         }
     });
 
-    // Save to localStorage
-    localStorage.setItem('products', JSON.stringify(products));
+    // Save to Firebase (แทน localStorage)
+    saveProductsToFirebase();
 
     // Update UI
     const currentCategory = document.querySelector('.filter-btn.active').dataset.category;
