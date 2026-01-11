@@ -158,7 +158,7 @@ const defaultProducts = [
 // --- Firebase Integration ---
 // กรุณานำ Config ของคุณจาก Firebase Console มาใส่ที่นี่
 const firebaseConfig = {
-    apiKey: "AIzaSyDbFDX10BBTUXt8kqXZDbVHzN-ls_1CL0Q",
+    apiKey: "AIzaSyDbFDX1OBBTUXt8kqXZDbVHzN-ls_1CL0Q",
     authDomain: "siwabeetle-shop.firebaseapp.com",
     databaseURL: "https://siwabeetle-shop-default-rtdb.asia-southeast1.firebasedatabase.app/",
     projectId: "siwabeetle-shop",
@@ -796,9 +796,11 @@ window.submitAdminLogin = function () {
         })
         .catch((error) => {
             console.error("Login Error:", error);
-            showToast("อีเมลหรือรหัสผ่านไม่ถูกต้อง หรือยังไม่ได้เปิดใช้งานใน Firebase Console", "error");
+            // แสดง Error Code เพื่อให้รู้สาเหตุที่แท้จริง
+            showToast(`เข้าไม่ได้: ${error.code}`, "error");
         });
 }
+
 
 
 
