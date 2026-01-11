@@ -175,42 +175,47 @@ if (isFirebaseConfigured) {
 }
 
 const database = isFirebaseConfigured ? firebase.database() : null;
+const auth = firebase.auth();
 
 // ข้อมูลสินค้าที่ใช้งานในแอป (เริ่มต้นด้วย default)
 let products = [...defaultProducts];
 
 // ฟังก์ชันสำหรับดึงและซิงค์ข้อมูลจาก Firebase
 function syncProductsWithFirebase() {
-    if (!database) {
-        console.warn("Firebase is not configured yet. Using local data.");
-        return;
-    }
+    if (!database) return;
 
     const productsRef = database.ref('products');
 
-    // โหลดข้อมูลครั้งแรกและอัปเดตอัตโนมัติเมื่อมีการเปลี่ยนแปลง (Real-time)
     productsRef.on('value', (snapshot) => {
         const data = snapshot.val();
         if (data) {
-            // รวมข้อมูลจากฐานข้อมูล (สต็อก) เข้ากับข้อมูลหลัก (ชื่อ/ราคา/รูป)
+            // โหลดข้อมูลแบบอาศัย Key เป็น ID หรือลำดับ
+            const dataArray = Array.isArray(data) ? data : Object.values(data);
+
             products = defaultProducts.map(defProd => {
-                const cloudData = data.find(p => p.id === defProd.id);
+                const cloudData = dataArray.find(p => p && p.id === defProd.id);
                 return {
                     ...defProd,
-                    stock: cloudData ? cloudData.stock : defProd.stock
+                    stock: (cloudData && typeof cloudData.stock !== 'undefined') ? cloudData.stock : defProd.stock
                 };
             });
 
-            // อัปเดต UI หลังจากข้อมูลมาแล้ว
+            // อัปเดต UI โดยใช้ Filter ปัจจุบัน
             const activeBtn = document.querySelector('.filter-btn.active');
             const currentCategory = activeBtn ? activeBtn.dataset.category : 'all';
             renderProducts(currentCategory);
         } else {
-            // ถ้าไม่มีข้อมูลใน Firebase (ครั้งแรก) ให้ส่งข้อมูลตั้งต้นขึ้นไป
-            productsRef.set(defaultProducts.map(p => ({ id: p.id, stock: p.stock })));
+            // ถ้าไม่มีข้อมูล ให้ส่งขึ้นไปก่อน
+            const initialData = {};
+            defaultProducts.forEach(p => {
+                initialData[p.id] = { id: p.id, stock: p.stock };
+            });
+            productsRef.set(initialData);
         }
     });
 }
+
+
 
 // เริ่มการซิงค์
 syncProductsWithFirebase();
@@ -277,35 +282,6 @@ function renderAdminProducts() {
     });
 }
 
-// ... [Existing Cart Logic Functions] ...
-
-// Event Listeners
-function setupEventListeners() {
-    // ... [Existing Listeners] ...
-
-    // Admin Modal - Re-select to be safe (Cleaned up: Handled by inline onclick now)
-    // We keep existing listeners for other parts, but remove the ones we moved to global functions
-
-    // Window Click to Close Modals (Keep this one)
-    window.addEventListener('click', (e) => {
-        if (e.target === cartModal) closeModal(cartModal);
-        if (e.target === loginModal) closeModal(loginModal);
-        if (e.target === document.getElementById('admin-modal')) {
-            window.closeAdminModal();
-        }
-    });
-
-    window.addEventListener('click', (e) => {
-        if (e.target === cartModal) closeModal(cartModal);
-        if (e.target === loginModal) closeModal(loginModal);
-        if (e.target === adminModal) {
-            adminModal.classList.remove('active');
-            document.body.style.overflow = '';
-        }
-    });
-
-    // ... [Existing Listeners continued] ...
-}
 
 
 function updateLoginStatus() {
@@ -317,6 +293,8 @@ function updateLoginStatus() {
         loginTrigger.title = "ข้อมูลผู้ส่ง";
     }
 }
+
+
 
 // Render Products
 function renderProducts(filter) {
@@ -552,72 +530,51 @@ function setupEventListeners() {
         if (e.target === loginModal) closeModal(loginModal);
     });
 
-    // Copy Summary
-    copySummaryBtn.addEventListener('click', () => {
-        if (!checkLogin()) return;
-        if (cart.length === 0) {
-            showToast("ตะกร้าว่างอยู่ครับ", "error");
-            return;
-        }
+    const copySummaryBtn = document.getElementById('copy-summary');
 
-        let summary = "📦 รายการสั่งซื้อ Siwabeetles Shop:\n";
-        summary += `👤 ลูกค้า: ${userProfile.name}\n`;
-        summary += `📞 เบอร์โทร: ${userProfile.phone}\n`;
-        summary += `📍 ที่อยู่: ${userProfile.address}\n`;
-        if (userProfile.note) summary += `✍️ เพิ่มเติม: ${userProfile.note}\n`;
-        summary += "------------------\n";
+    if (copySummaryBtn) {
+        copySummaryBtn.addEventListener('click', () => {
+            if (!checkLogin()) return;
 
-        cart.forEach(item => {
-            summary += `- ${item.name} x ${item.qty} = ${(item.price * item.qty).toLocaleString()} ฿\n`;
+            if (cart.length === 0) {
+                showToast("ตะกร้าว่างอยู่ครับ", "error");
+                return;
+            }
+
+            copyOrderSummary();
         });
+    }
+}
 
-        const subtotal = cart.reduce((acc, item) => acc + (item.price * item.qty), 0);
-        summary += `------------------\n`;
-        summary += `🛒 ยอดรวมสินค้า: ${subtotal.toLocaleString()} บาท\n`;
-        summary += `🚚 ค่าจัดส่ง: ${SHIPPING_FEE} บาท\n`;
-        summary += `💰 ยอดรวมทั้งสิ้น: ${(subtotal + SHIPPING_FEE).toLocaleString()} บาท`;
+function copyOrderSummary() {
+    if (!userProfile) {
+        showToast("กรุณากรอกข้อมูลผู้ส่งก่อนนะครับ", "error");
+        checkLogin();
+        return;
+    }
 
-        navigator.clipboard.writeText(summary).then(() => {
-            showToast("คัดลอกรายการแล้ว ส่งให้ทางเพจได้เลย!");
-        });
+    let summary = "📦 รายการสั่งซื้อ Siwabeetles Shop:\n";
+    summary += `👤 ลูกค้า: ${userProfile.name}\n`;
+    summary += `📞 เบอร์โทร: ${userProfile.phone}\n`;
+    summary += `📍 ที่อยู่: ${userProfile.address}\n`;
+    if (userProfile.note) summary += `✍️ เพิ่มเติม: ${userProfile.note}\n`;
+    summary += "------------------\n";
+
+    cart.forEach(item => {
+        summary += `- ${item.name} x ${item.qty} = ${(item.price * item.qty).toLocaleString()} ฿\n`;
     });
 
-    // Checkout (Redirect to FB)
-    // checkoutBtn.addEventListener('click', () => {
-    //     if (!checkLogin()) return;
+    const subtotal = cart.reduce((acc, item) => acc + (item.price * item.qty), 0);
+    summary += `------------------\n`;
+    summary += `🛒 ยอดรวมสินค้า: ${subtotal.toLocaleString()} บาท\n`;
+    summary += `🚚 ค่าจัดส่ง: ${SHIPPING_FEE} บาท\n`;
+    summary += `💰 ยอดรวมทั้งสิ้น: ${(subtotal + SHIPPING_FEE).toLocaleString()} บาท`;
 
-    //     if (cart.length === 0) {
-    //         showToast("ตะกร้าว่างอยู่ครับ", "error");
-    //         return;
-    //     }
-
-    //     // Deduct Stock on Checkout
-    //     cart.forEach(cartItem => {
-    //         const product = products.find(p => p.id === cartItem.id);
-    //         if (product) {
-    //             product.stock = Math.max(0, product.stock - cartItem.qty);
-    //         }
-    //     });
-
-    //     // Save updated stock to localStorage
-    //     localStorage.setItem('products', JSON.stringify(products));
-
-    //     // Clear Cart
-    //     cart = [];
-    //     updateCartUI();
-
-    //     // Re-render to show new stock level
-    //     const currentCategory = document.querySelector('.filter-btn.active').dataset.category;
-    //     renderProducts(currentCategory);
-
-    //     showToast("สั่งซื้อสำเร็จ! กำลังไปที่ Facebook...");
-
-    //     // Redirect to FB after a short delay
-    //     setTimeout(() => {
-    //         window.open('https://www.facebook.com/siwakorn.bunde.2024', '_blank');
-    //     }, 1500);
-    // });
+    navigator.clipboard.writeText(summary).then(() => {
+        showToast("คัดลอกรายการแล้ว ส่งให้ทางเพจได้เลย!");
+    });
 }
+
 
 function openPayment() {
 
@@ -639,81 +596,100 @@ function closePayment() {
 
 // ฟังก์ชันสำหรับบันทึกสต็อกกลับไปยัง Firebase
 function saveProductsToFirebase() {
-    if (!database) {
-        localStorage.setItem('products', JSON.stringify(products));
+    if (!database) return;
+
+    const user = firebase.auth().currentUser;
+    if (!user) {
+        showToast("กรุณาเข้าสู่ระบบแอดมินก่อน", "error");
         return;
     }
 
-    // บันทึกเฉพาะ id และสต็อก
-    const stockData = products.map(p => ({ id: p.id, stock: p.stock }));
-    database.ref('products').set(stockData)
-        .then(() => console.log("Stock synced to Firebase"))
-        .catch(err => console.error("Firebase Sync Error:", err));
+    const dataToSave = {};
+    products.forEach(p => {
+        dataToSave[p.id] = {
+            name: p.name,
+            category: p.category,
+            price: p.price,
+            image: p.image,
+            stock: p.stock,
+            description: p.description
+        };
+    });
+
+    database.ref('products').update(dataToSave)
+        .then(() => showToast("บันทึกสินค้าเรียบร้อย", "success"))
+        .catch(() => showToast("ไม่มีสิทธิ์บันทึกข้อมูล", "error"));
 }
+
 
 function confirmPayment() {
-
     if (!checkLogin()) return;
+    if (cart.length === 0) return;
 
-    if (cart.length === 0) {
-        showToast("ตะกร้าว่างอยู่ครับ", "error");
-        return;
-    }
+    // 1️⃣ เก็บข้อมูลออเดอร์ก่อน (สำคัญมาก)
+    const orderItems = [...cart];
 
-    // 1. ตัดสต็อกสินค้า
-    cart.forEach(cartItem => {
-        const product = products.find(p => p.id === cartItem.id);
-        if (product) {
-            product.stock = Math.max(0, product.stock - cartItem.qty);
-        }
+    // 2️⃣ ตัดสต็อกแบบ transaction
+    const updates = [];
+
+    orderItems.forEach(item => {
+        const ref = database.ref(`products/${item.id}/stock`);
+        updates.push(
+            ref.transaction(current => {
+                if (current >= item.qty) {
+                    return current - item.qty;
+                }
+                return; // cancel
+            })
+        );
     });
 
-    // 2. บันทึกสต็อกที่อัปเดตลง Firebase (แทน localStorage)
-    saveProductsToFirebase();
+    Promise.all(updates)
+        .then(() => {
+            showToast("ตัดสต็อกเรียบร้อย", "success");
 
-    // สร้างข้อความสรุปรายการสั่งซื้อ
-    let summary = "📦 รายการสั่งซื้อ Siwabeetles Shop:\n";
-    summary += `👤 ลูกค้า: ${userProfile.name}\n`;
-    summary += `📞 เบอร์โทร: ${userProfile.phone}\n`;
-    summary += `📍 ที่อยู่: ${userProfile.address}\n`;
-    if (userProfile.note) summary += `✍️ เพิ่มเติม: ${userProfile.note}\n`;
-    summary += "------------------\n";
+            // 3️⃣ สร้างข้อความสรุป (ใช้ orderItems)
+            let summary = "📦 รายการสั่งซื้อ Siwabeetles Shop:\n";
+            summary += `👤 ลูกค้า: ${userProfile.name}\n`;
+            summary += `📞 เบอร์โทร: ${userProfile.phone}\n`;
+            summary += `📍 ที่อยู่: ${userProfile.address}\n`;
+            if (userProfile.note) summary += `✍️ เพิ่มเติม: ${userProfile.note}\n`;
+            summary += "------------------\n";
 
-    cart.forEach(item => {
-        summary += `- ${item.name} x ${item.qty} = ${(item.price * item.qty).toLocaleString()} ฿\n`;
-    });
+            orderItems.forEach(item => {
+                summary += `- ${item.name} x ${item.qty} = ${(item.price * item.qty).toLocaleString()} ฿\n`;
+            });
 
-    const subtotal = cart.reduce((acc, item) => acc + (item.price * item.qty), 0);
-    summary += `------------------\n`;
-    summary += `🛒 ยอดรวมสินค้า: ${subtotal.toLocaleString()} บาท\n`;
-    summary += `🚚 ค่าจัดส่ง: ${SHIPPING_FEE} บาท\n`;
-    summary += `💰 ยอดรวมทั้งสิ้น: ${(subtotal + SHIPPING_FEE).toLocaleString()} บาท\n\n`;
-    summary += "✅ ได้ชำระเงินเรียบร้อยแล้ว (อย่าลืมแนบสลิปโอนด้วยน้า)";
+            const subtotal = orderItems.reduce((acc, item) => acc + (item.price * item.qty), 0);
+            summary += `------------------\n`;
+            summary += `🛒 ยอดรวมสินค้า: ${subtotal.toLocaleString()} บาท\n`;
+            summary += `🚚 ค่าจัดส่ง: ${SHIPPING_FEE} บาท\n`;
+            summary += `💰 ยอดรวมทั้งสิ้น: ${(subtotal + SHIPPING_FEE).toLocaleString()} บาท\n\n`;
+            summary += "✅ ได้ชำระเงินเรียบร้อยแล้ว (อย่าลืมแนบสลิปโอนด้วยน้า)";
 
-    // เปิด Facebook Profile
-    const facebookUrl = "https://www.facebook.com/siwakorn.bunde.2024?locale=th_TH";
+            // 4️⃣ คัดลอก + เปิด Facebook
+            navigator.clipboard.writeText(summary)
+                .then(() => showToast("คัดลอกรายการแล้ว กำลังเปิด Facebook..."))
+                .catch(() => showToast("กำลังเปิด Facebook..."));
 
-    // คัดลอกข้อความไปยัง Clipboard
-    navigator.clipboard.writeText(summary).then(() => {
-        showToast("คัดลอกรายการแล้ว กำลังเปิด Facebook...");
-    }).catch(() => {
-        showToast("กำลังเปิด Facebook...");
-    });
+            setTimeout(() => {
+                window.open("https://www.facebook.com/siwakorn.bunde.2024?locale=th_TH", "_blank");
+            }, 1000);
 
-    // เปิด Facebook ในแท็บใหม่
-    setTimeout(() => {
-        window.open(facebookUrl, '_blank');
-    }, 1000);
+            // 5️⃣ ล้างตะกร้าและอัปเดต UI
+            cart = [];
+            updateCartUI();
+            closePayment();
 
-    // ปิด Modal
-    closePayment();
-
-    // 3. ล้างตะกร้าและอัปเดตหน้าจอทันที
-    cart = [];
-    updateCartUI();
-    const currentCategory = document.querySelector('.filter-btn.active')?.dataset.category || 'all';
-    renderProducts(currentCategory);
+            const currentCategory =
+                document.querySelector('.filter-btn.active')?.dataset.category || 'all';
+            renderProducts(currentCategory);
+        })
+        .catch(() => {
+            showToast("สินค้าบางรายการหมด", "error");
+        });
 }
+
 
 function downloadQR() {
     // Get the QR image element
@@ -760,26 +736,7 @@ function showToast(message, type = "success") {
     }, 3000);
 }
 
-// Global function for Admin Modal
-window.openAdminModal = function () {
-    // Security Check at Entrance
-    const password = prompt("🔒 กรุณาใส่รหัสลับแอดมิน เพื่อเข้าสู่เมนูจัดการสต็อก:");
 
-    if (password === "admin888") {
-        console.log("Access Granted");
-        renderAdminProducts();
-        const adminModal = document.getElementById('admin-modal');
-        if (adminModal) {
-            adminModal.classList.add('active');
-            document.body.style.overflow = 'hidden';
-            showToast("ยินดีต้อนรับแอดมิน! 🛠️", "success");
-        } else {
-            console.error("Admin modal element not found!");
-        }
-    } else if (password !== null) {
-        showToast("รหัสผ่านไม่ถูกต้อง! ห้ามเข้าครับ", "error");
-    }
-};
 
 window.closeAdminModal = function () {
     const adminModal = document.getElementById('admin-modal');
@@ -788,6 +745,61 @@ window.closeAdminModal = function () {
         document.body.style.overflow = '';
     }
 };
+
+
+
+firebase.auth().onAuthStateChanged(user => {
+    const adminTrigger = document.getElementById('admin-trigger');
+    const loginSection = document.getElementById('admin-login-section');
+
+    if (user && user.email === "siwakon.bn@rmuti.ac.th") {
+        sessionStorage.setItem("isAdmin", "true");
+        if (adminTrigger) adminTrigger.style.display = "flex";
+        if (loginSection) loginSection.style.display = "none";
+    } else {
+        sessionStorage.removeItem("isAdmin");
+        if (adminTrigger) adminTrigger.style.display = "none";
+        if (loginSection) loginSection.style.display = "block";
+    }
+});
+
+function openAdminPanel() {
+    if (sessionStorage.getItem("isAdmin") !== "true") {
+        showToast("เฉพาะแอดมินเท่านั้น", "error");
+        return;
+    }
+
+    renderAdminProducts();
+    const adminModal = document.getElementById('admin-modal');
+    if (adminModal) {
+        adminModal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+}
+
+window.submitAdminLogin = function () {
+    const emailInput = document.getElementById('admin-email');
+    const passwordInput = document.getElementById('admin-password');
+    const email = emailInput ? emailInput.value.trim() : "";
+    const password = passwordInput ? passwordInput.value.trim() : "";
+
+    if (!email || !password) {
+        showToast("กรุณากรอกข้อมูลให้ครบ", "error");
+        return;
+    }
+
+    firebase.auth().signInWithEmailAndPassword(email, password)
+        .then(() => {
+            showToast("เข้าสู่ระบบแอดมินแล้ว", "success");
+            if (emailInput) emailInput.value = "";
+            if (passwordInput) passwordInput.value = "";
+        })
+        .catch((error) => {
+            console.error("Login Error:", error);
+            showToast("อีเมลหรือรหัสผ่านไม่ถูกต้อง หรือยังไม่ได้เปิดใช้งานใน Firebase Console", "error");
+        });
+}
+
 
 
 

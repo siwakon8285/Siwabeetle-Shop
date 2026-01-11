@@ -105,6 +105,9 @@
                 <button class="btn-primary checkout-btn" onclick="openPayment()">
                     <i class="fa-solid fa-qrcode"></i> ชำระเงินด้วย PromptPay
                 </button>
+                <button class="filter-btn" id="copy-summary" style="width: 100%; margin-top: 10px;">
+                    <i class="fa-solid fa-copy"></i> คัดลอกรายการสินค้า
+                </button>
 
             </div>
         </div>
@@ -161,10 +164,25 @@
     <!-- Toast Container -->
     <div id="toast-container"></div>
 
-    <!-- Admin Trigger in Footer -->
-    <button id="admin-trigger" onclick="openAdminModal()" title="จัดการสต็อก">
+    <!-- Admin Trigger (Visible only if logged in) -->
+    <button id="admin-trigger" onclick="openAdminPanel()" title="จัดการสต็อก" style="display: none;">
         <i class="fa-solid fa-gear"></i>
     </button>
+
+    <!-- Admin Login Section -->
+    <div id="admin-login-section"
+        style="padding: 20px; text-align: center; border-top: 1px solid rgba(255,255,255,0.1); margin-top: 50px;">
+        <h3 style="margin-bottom: 15px; color: var(--light-moss);">แอดมินเข้าสู่ระบบ</h3>
+        <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+            <input id="admin-email" placeholder="Email"
+                style="padding: 8px; border-radius: 5px; border: 1px solid var(--moss-green); background: rgba(0,0,0,0.3); color: white;">
+            <input id="admin-password" type="password" placeholder="Password"
+                style="padding: 8px; border-radius: 5px; border: 1px solid var(--moss-green); background: rgba(0,0,0,0.3); color: white;">
+            <button class="btn-primary" onclick="submitAdminLogin()" style="padding: 8px 20px;">เข้าสู่ระบบ</button>
+        </div>
+    </div>
+
+
 
     <div class="modal" id="payment-modal">
         <div class="glass registration-form">
@@ -204,7 +222,11 @@
 
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+
+
 
     <script src="app.js"></script>
 
