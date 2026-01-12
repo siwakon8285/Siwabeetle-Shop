@@ -1069,3 +1069,40 @@ footer {
 #slip-upload:hover {
     background: rgba(255, 255, 255, 0.1);
 }
+
+/* Hidden Admin Button (Stealth Style) */
+#admin-trigger {
+    position: fixed;
+    bottom: 15px;
+    left: 15px;
+    width: 25px;
+    height: 25px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    border-radius: 50%;
+    color: rgba(255, 255, 255, 0.08);
+    cursor: pointer;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+    opacity: 0.3;
+}
+
+#admin-trigger:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.1);
+    transform: rotate(90deg);
+    opacity: 1;
+}
+
+#admin-trigger i {
+    font-size: 0.75rem;
+}
+
+/* Admin Login Modal */
+#admin-login-modal {
+    justify-content: center;
+}

@@ -193,7 +193,14 @@ function syncProductsWithFirebase() {
             const dataArray = Array.isArray(data) ? data : Object.values(data);
 
             products = defaultProducts.map(defProd => {
-                const cloudData = dataArray.find(p => p && p.id === defProd.id);
+                // Find data by ID inside object OR by the key in the snapshot
+                let cloudData = dataArray.find(p => p && p.id === defProd.id);
+
+                // Fallback: If not found in array, try finding by key in the raw data object
+                if (!cloudData && data[defProd.id]) {
+                    cloudData = data[defProd.id];
+                }
+
                 return {
                     ...defProd,
                     stock: (cloudData && typeof cloudData.stock !== 'undefined') ? cloudData.stock : defProd.stock
@@ -599,14 +606,18 @@ function saveProductsToFirebase() {
     if (!database) return;
 
     const user = firebase.auth().currentUser;
-    if (!user) {
-        showToast("กรุณาเข้าสู่ระบบแอดมินก่อน", "error");
+    const ADMIN_EMAIL = "siwakon.bn@rmuti.ac.th";
+
+    if (!user || user.email !== ADMIN_EMAIL) {
+        showToast("สิทธิ์ไม่ถูกต้อง: เฉพาะเจ้าของร้านเท่านั้นที่แก้ไขได้", "error");
+        console.error("Unauthorized write attempt by:", user ? user.email : "Anonymous");
         return;
     }
 
     const dataToSave = {};
     products.forEach(p => {
         dataToSave[p.id] = {
+            id: p.id, // Explicitly include ID
             name: p.name,
             category: p.category,
             price: p.price,
@@ -748,18 +759,32 @@ window.closeAdminModal = function () {
 
 
 
+// Functions for Admin Login Modal
+window.toggleAdminLogin = function () {
+    const modal = document.getElementById('admin-login-modal');
+    if (modal) {
+        modal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+};
+
+window.closeAdminLogin = function () {
+    const modal = document.getElementById('admin-login-modal');
+    if (modal) {
+        modal.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+};
+
 firebase.auth().onAuthStateChanged(user => {
-    const adminTrigger = document.getElementById('admin-trigger');
-    const loginSection = document.getElementById('admin-login-section');
+    const adminLoginModal = document.getElementById('admin-login-modal');
 
     if (user && user.email === "siwakon.bn@rmuti.ac.th") {
         sessionStorage.setItem("isAdmin", "true");
-        if (adminTrigger) adminTrigger.style.display = "flex";
-        if (loginSection) loginSection.style.display = "none";
+        // Close login modal if open
+        if (adminLoginModal) adminLoginModal.classList.remove('active');
     } else {
         sessionStorage.removeItem("isAdmin");
-        if (adminTrigger) adminTrigger.style.display = "none";
-        if (loginSection) loginSection.style.display = "block";
     }
 });
 
@@ -793,10 +818,15 @@ window.submitAdminLogin = function () {
             showToast("เข้าสู่ระบบแอดมินแล้ว", "success");
             if (emailInput) emailInput.value = "";
             if (passwordInput) passwordInput.value = "";
+
+            // Auto open admin panel after login
+            setTimeout(() => {
+                openAdminPanel();
+                closeAdminLogin(); // Close the login modal
+            }, 500);
         })
         .catch((error) => {
             console.error("Login Error:", error);
-            // แสดง Error Code เพื่อให้รู้สาเหตุที่แท้จริง
             showToast(`เข้าไม่ได้: ${error.code}`, "error");
         });
 }
@@ -810,21 +840,19 @@ window.saveStock = function () {
     products.forEach(product => {
         const input = document.getElementById(`stock-input-${product.id}`);
         if (input) {
-            product.stock = parseInt(input.value) || 0;
+            const newStock = parseInt(input.value);
+            product.stock = isNaN(newStock) ? 0 : newStock;
         }
     });
 
-    // Save to Firebase (แทน localStorage)
+    // Save to Firebase (Persist data)
     saveProductsToFirebase();
-
-    // Update UI
-    const currentCategory = document.querySelector('.filter-btn.active').dataset.category;
-    renderProducts(currentCategory);
 
     // Close Modal
     window.closeAdminModal();
 
-    showToast("บันทึกสต็อกเรียบร้อยแล้ว!");
+    // Note: renderProducts will be automatically called by syncProductsWithFirebase 
+    // when the data in Firebase changes.
 };
 
 // Global for inline onclick
