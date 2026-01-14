@@ -10,12 +10,19 @@
                 ".write": "auth != null && auth.uid == $uid",
                 "orders": {
                     ".read": "auth != null && auth.uid == $uid",
-                    ".write": "auth != null && auth.uid == $uid"
+                    ".write": "auth != null && auth.uid == $uid",
+                    ".indexOn": [
+                        "createdAt"
+                    ]
                 }
             }
         },
         "orders": {
             ".read": "auth != null && root.child('admins').child(auth.uid).exists()",
+            ".indexOn": [
+                "createdAt",
+                "userId"
+            ],
             "$orderId": {
                 ".read": "auth != null && (data.child('userId').val() == auth.uid || root.child('admins').child(auth.uid).exists())",
                 ".write": "auth != null && (!data.exists() || data.child('userId').val() == auth.uid)",
