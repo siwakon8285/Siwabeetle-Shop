@@ -2,7 +2,13 @@
     "rules": {
         "products": {
             ".read": true,
-            ".write": "auth != null && root.child('admins').child(auth.uid).exists()"
+            ".write": "auth != null && root.child('admins').child(auth.uid).exists()",
+            "$productId": {
+                "stock": {
+                    ".write": "auth != null && newData.isNumber() && newData.val() >= 0 && (newData.val() == data.val() - 1 || newData.val() == data.val() + 1 || root.child('admins').child(auth.uid).exists())",
+                    ".validate": "newData.isNumber() && newData.val() >= 0"
+                }
+            }
         },
         "users": {
             "$uid": {
