@@ -246,6 +246,21 @@
                                 <i class="fa-solid fa-map-location-dot"></i> แก้ไขข้อมูลที่อยู่
                             </button>
                         </div>
+
+                        <!-- Order History Section -->
+                        <div class="info-card-premium" style="margin-top: 15px;">
+                            <div class="info-card-header">
+                                <i class="fa-solid fa-receipt"></i> ประวัติการสั่งซื้อ
+                            </div>
+                            <div class="info-card-content" id="order-history-content">
+                                <p style="opacity: 0.6; font-style: italic;">ยังไม่มีประวัติการสั่งซื้อ</p>
+                            </div>
+                            <button class="btn-premium-action"
+                                style="width: 100%; margin-top: 15px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);"
+                                onclick="window.loadOrderHistory()">
+                                <i class="fa-solid fa-rotate"></i> โหลดประวัติใหม่
+                            </button>
+                        </div>
                     </div>
 
                     <div class="profile-action-btns">

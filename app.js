@@ -145,15 +145,6 @@
             stock: 0,
             description: "แมทหมักคุณภาพสูงสำหรับด้วง"
         },
-        {
-            id: 17,
-            name: "ไม้พุสำหรับเพราะด้วงคีม",
-            category: "accessory",
-            price: 180,
-            image: "https://th-test-11.slatic.net/p/3e39b81cdc98e589c1b1bf7311822287.jpg",
-            stock: 0,
-            description: "แมทหมักคุณภาพสูงสำหรับด้วง"
-        },
     ];
 
     // Firebase Configuration
@@ -174,6 +165,268 @@
     }
     const database = firebase.database();
     const auth = firebase.auth();
+
+    // ==========================================
+    // SECURITY UTILITIES - XSS Prevention
+    // ==========================================
+
+    /**
+     * Sanitize HTML to prevent XSS attacks
+     * @param {string} str - String to sanitize
+     * @returns {string} - Sanitized string safe for HTML display
+     */
+    function sanitizeHTML(str) {
+        if (str === null || str === undefined) return '';
+        const div = document.createElement('div');
+        div.textContent = String(str);
+        return div.innerHTML;
+    }
+
+    /**
+     * Validate Thai phone number format
+     * @param {string} phone - Phone number to validate
+     * @returns {boolean} - True if valid Thai phone number
+     */
+    function isValidPhone(phone) {
+        if (!phone) return false;
+        const cleaned = phone.replace(/[-\s]/g, '');
+        return /^0[689]\d{8}$/.test(cleaned);
+    }
+
+    /**
+     * Validate name (no HTML/script tags)
+     * @param {string} name - Name to validate
+     * @returns {boolean} - True if valid name
+     */
+    function isValidName(name) {
+        if (!name) return false;
+        return name.length >= 2 && name.length <= 100 &&
+            !/[<>"'`]/.test(name);
+    }
+
+    /**
+     * Validate address (basic sanitization check)
+     * @param {string} address - Address to validate
+     * @returns {boolean} - True if valid address
+     */
+    function isValidAddress(address) {
+        if (!address) return false;
+        return address.length >= 10 && address.length <= 500 &&
+            !/[<>]/.test(address);
+    }
+
+    // ==========================================
+    // ORDER MANAGEMENT SYSTEM
+    // ==========================================
+
+    /**
+     * Generate unique OrderID with format SWB-YYYYMMDD-XXXX
+     * @returns {string} - Unique order ID
+     */
+    function generateOrderId() {
+        const now = new Date();
+        const datePart = now.toISOString().slice(0, 10).replace(/-/g, '');
+        const randomPart = Math.random().toString(36).substring(2, 6).toUpperCase();
+        const timePart = now.getTime().toString(36).slice(-4).toUpperCase();
+        return `SWB-${datePart}-${randomPart}${timePart}`;
+    }
+
+    /**
+     * Create order in Firebase Database
+     * @param {Array} cartItems - Items in cart
+     * @param {Object} deliveryInfo - Delivery information
+     * @returns {Promise<Object>} - Order object with orderId
+     */
+    async function createOrder(cartItems, deliveryInfo) {
+        if (!userProfile || !userProfile.uid) {
+            throw new Error('User not authenticated');
+        }
+
+        const orderId = generateOrderId();
+        const subtotal = cartItems.reduce((sum, item) => sum + (item.price * item.qty), 0);
+        const shipping = 100;
+        const total = subtotal + shipping;
+
+        const orderData = {
+            orderId: orderId,
+            userId: userProfile.uid,
+            userEmail: userProfile.email || '',
+            userName: userProfile.username || '',
+            items: cartItems.map(item => ({
+                id: item.id,
+                name: sanitizeHTML(item.name),
+                price: item.price,
+                qty: item.qty,
+                subtotal: item.price * item.qty
+            })),
+            subtotal: subtotal,
+            shipping: shipping,
+            total: total,
+            deliveryInfo: {
+                name: sanitizeHTML(deliveryInfo.name || ''),
+                phone: sanitizeHTML(deliveryInfo.phone || ''),
+                address: sanitizeHTML(deliveryInfo.address || ''),
+                note: sanitizeHTML(deliveryInfo.note || '')
+            },
+            status: 'pending_payment',
+            createdAt: new Date().toISOString(),
+            paymentConfirmedAt: null
+        };
+
+        // Save to Firebase
+        await database.ref('orders/' + orderId).set(orderData);
+
+        // Also save to user's order history
+        await database.ref('users/' + userProfile.uid + '/orders/' + orderId).set({
+            orderId: orderId,
+            total: total,
+            status: orderData.status,
+            createdAt: orderData.createdAt,
+            itemCount: cartItems.reduce((sum, item) => sum + item.qty, 0)
+        });
+
+        return orderData;
+    }
+
+    /**
+     * Get user's order history
+     * @returns {Promise<Array>} - Array of orders
+     */
+    async function getUserOrders() {
+        if (!userProfile || !userProfile.uid) {
+            return [];
+        }
+
+        try {
+            const snapshot = await database.ref('users/' + userProfile.uid + '/orders')
+                .orderByChild('createdAt')
+                .limitToLast(20)
+                .once('value');
+
+            const orders = [];
+            snapshot.forEach(child => {
+                orders.unshift(child.val()); // Newest first
+            });
+            return orders;
+        } catch (err) {
+            console.error('Error fetching orders:', err);
+            return [];
+        }
+    }
+
+    /**
+     * Get order details by ID
+     * @param {string} orderId - Order ID
+     * @returns {Promise<Object|null>} - Order object or null
+     */
+    async function getOrderById(orderId) {
+        try {
+            const snapshot = await database.ref('orders/' + orderId).once('value');
+            const order = snapshot.val();
+
+            // Security check: only return if order belongs to current user
+            if (order && order.userId === userProfile?.uid) {
+                return order;
+            }
+            return null;
+        } catch (err) {
+            console.error('Error fetching order:', err);
+            return null;
+        }
+    }
+
+    // ==========================================
+    // ADMIN ANALYTICS FUNCTIONS
+    // ==========================================
+
+    /**
+     * Get all orders for admin analytics
+     * @returns {Promise<Array>} - Array of all orders
+     */
+    async function getAllOrders() {
+        if (!userProfile || userProfile.username?.toLowerCase() !== 'siwakon') {
+            return [];
+        }
+
+        try {
+            const snapshot = await database.ref('orders')
+                .orderByChild('createdAt')
+                .once('value');
+
+            const orders = [];
+            snapshot.forEach(child => {
+                orders.push(child.val());
+            });
+            return orders;
+        } catch (err) {
+            console.error('Error fetching all orders:', err);
+            return [];
+        }
+    }
+
+    /**
+     * Calculate sales analytics
+     * @param {Array} orders - Array of orders
+     * @returns {Object} - Analytics data
+     */
+    function calculateAnalytics(orders) {
+        const now = new Date();
+        const today = now.toISOString().slice(0, 10);
+        const thisMonth = now.toISOString().slice(0, 7);
+
+        let totalRevenue = 0;
+        let todayRevenue = 0;
+        let monthRevenue = 0;
+        let totalOrders = orders.length;
+        let todayOrders = 0;
+        let monthOrders = 0;
+        const productSales = {};
+
+        orders.forEach(order => {
+            const orderDate = order.createdAt?.slice(0, 10) || '';
+            const orderMonth = order.createdAt?.slice(0, 7) || '';
+            const orderTotal = order.total || 0;
+
+            totalRevenue += orderTotal;
+
+            if (orderDate === today) {
+                todayRevenue += orderTotal;
+                todayOrders++;
+            }
+
+            if (orderMonth === thisMonth) {
+                monthRevenue += orderTotal;
+                monthOrders++;
+            }
+
+            // Track product sales
+            if (order.items) {
+                order.items.forEach(item => {
+                    const key = item.name || 'Unknown';
+                    if (!productSales[key]) {
+                        productSales[key] = { name: key, qty: 0, revenue: 0 };
+                    }
+                    productSales[key].qty += item.qty || 0;
+                    productSales[key].revenue += item.subtotal || 0;
+                });
+            }
+        });
+
+        // Sort products by quantity sold
+        const topProducts = Object.values(productSales)
+            .sort((a, b) => b.qty - a.qty)
+            .slice(0, 5);
+
+        return {
+            totalRevenue,
+            todayRevenue,
+            monthRevenue,
+            totalOrders,
+            todayOrders,
+            monthOrders,
+            topProducts
+        };
+    }
 
     let cart = [];
     let userProfile = null;
@@ -397,10 +650,10 @@
             if (profileView) profileView.style.display = 'block';
             if (modalTitle) modalTitle.textContent = 'โปรไฟล์ของคุณ';
 
-            if (userDisplay) userDisplay.textContent = userProfile.username;
+            if (userDisplay) userDisplay.textContent = sanitizeHTML(userProfile.username);
 
             const emailDisplay = getEl('profile-email-display');
-            if (emailDisplay) emailDisplay.textContent = userProfile.email || '';
+            if (emailDisplay) emailDisplay.textContent = sanitizeHTML(userProfile.email || '');
 
             // Render Avatar
             const avatarImg = getEl('profile-avatar-img');
@@ -408,22 +661,25 @@
                 avatarImg.src = userProfile.avatar || 'images/beetle_avatar.png';
             }
 
-            // Render Delivery Info
+            // Render Delivery Info (with XSS protection)
             const deliveryContent = getEl('delivery-info-content');
             if (deliveryContent) {
                 const savedInfo = sessionStorage.getItem('deliveryInfo');
                 if (savedInfo) {
                     const info = JSON.parse(savedInfo);
                     deliveryContent.innerHTML = `
-                    <div style="margin-bottom: 8px;"><strong><i class="fa-solid fa-user-tag" style="width: 20px;"></i></strong> ${info.name}</div>
-                    <div style="margin-bottom: 8px;"><strong><i class="fa-solid fa-phone" style="width: 20px;"></i></strong> ${info.phone}</div>
-                    <div style="margin-bottom: 8px; word-break: break-word;"><strong><i class="fa-solid fa-location-dot" style="width: 20px;"></i></strong> ${info.address}</div>
-                    ${info.note ? `<div style="word-break: break-word; color: var(--dappled-gold); font-size: 0.85rem; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; border-left: 3px solid var(--dappled-gold); margin-top: 10px;"><strong>หมายเหตุ:</strong> ${info.note}</div>` : ''}
+                    <div style="margin-bottom: 8px;"><strong><i class="fa-solid fa-user-tag" style="width: 20px;"></i></strong> ${sanitizeHTML(info.name)}</div>
+                    <div style="margin-bottom: 8px;"><strong><i class="fa-solid fa-phone" style="width: 20px;"></i></strong> ${sanitizeHTML(info.phone)}</div>
+                    <div style="margin-bottom: 8px; word-break: break-word;"><strong><i class="fa-solid fa-location-dot" style="width: 20px;"></i></strong> ${sanitizeHTML(info.address)}</div>
+                    ${info.note ? `<div style="word-break: break-word; color: var(--dappled-gold); font-size: 0.85rem; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; border-left: 3px solid var(--dappled-gold); margin-top: 10px;"><strong>หมายเหตุ:</strong> ${sanitizeHTML(info.note)}</div>` : ''}
                 `;
                 } else {
                     deliveryContent.innerHTML = `<p style="opacity: 0.5; font-style: italic;">ยังไม่มีข้อมูลจัดส่ง</p>`;
                 }
             }
+
+            // Load order history
+            loadOrderHistory();
 
             // Show admin button for specific UID or Email if needed
             if (adminBtn) {
@@ -439,6 +695,74 @@
             if (modalTitle) modalTitle.textContent = 'เข้าสู่ระบบ';
         }
     }
+
+    /**
+     * Load and render user's order history in profile
+     */
+    async function loadOrderHistory() {
+        const container = getEl('order-history-content');
+        if (!container) return;
+
+        if (!userProfile || !userProfile.uid) {
+            container.innerHTML = `<p style="opacity: 0.5; font-style: italic;">กรุณาเข้าสู่ระบบ</p>`;
+            return;
+        }
+
+        container.innerHTML = `
+            <div style="text-align: center; padding: 20px;">
+                <i class="fa-solid fa-spinner fa-spin" style="color: var(--moss-green);"></i>
+            </div>
+        `;
+
+        try {
+            const orders = await getUserOrders();
+
+            if (orders.length === 0) {
+                container.innerHTML = `<p style="opacity: 0.5; font-style: italic;">ยังไม่มีประวัติการสั่งซื้อ</p>`;
+                return;
+            }
+
+            const statusLabels = {
+                'pending_payment': { color: '#ffc107', text: 'รอชำระ' },
+                'paid': { color: '#28a745', text: 'ชำระแล้ว' },
+                'shipped': { color: '#007bff', text: 'จัดส่งแล้ว' },
+                'completed': { color: '#52b788', text: 'สำเร็จ' },
+                'cancelled': { color: '#dc3545', text: 'ยกเลิก' }
+            };
+
+            let html = orders.slice(0, 5).map(order => {
+                const status = statusLabels[order.status] || statusLabels['pending_payment'];
+                const orderDate = new Date(order.createdAt).toLocaleDateString('th-TH', {
+                    day: 'numeric', month: 'short', year: '2-digit'
+                });
+
+                return `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <div>
+                            <div style="font-size: 0.8rem; font-weight: 600; color: var(--dappled-gold);">${sanitizeHTML(order.orderId)}</div>
+                            <div style="font-size: 0.7rem; color: var(--light-moss); opacity: 0.7;">${orderDate} | ${order.itemCount || 0} ชิ้น</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 0.85rem; font-weight: 700; color: white;">${order.total?.toLocaleString('th-TH') || 0} ฿</div>
+                            <div style="font-size: 0.65rem; color: ${status.color};">${status.text}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            if (orders.length > 5) {
+                html += `<p style="text-align: center; font-size: 0.75rem; color: var(--light-moss); margin-top: 10px; opacity: 0.7;">+ อีก ${orders.length - 5} รายการ</p>`;
+            }
+
+            container.innerHTML = html;
+        } catch (err) {
+            console.error('Error loading order history:', err);
+            container.innerHTML = `<p style="opacity: 0.5; font-style: italic; color: #ff6b6b;">เกิดข้อผิดพลาด</p>`;
+        }
+    }
+
+    // Expose loadOrderHistory to window for button onclick
+    window.loadOrderHistory = loadOrderHistory;
 
     /**
      * ฟังก์ชันออกจากระบบ
@@ -1067,57 +1391,67 @@
 
     /**
      * ฟังก์ชันยืนยันการชำระเงิน
+     * - สร้าง Order ใน Firebase พร้อม OrderID และ Timestamp
      * - สร้างสรุปรายการสั่งซื้อและที่อยู่จัดส่ง
      * - คัดลอกข้อความสรุปไปยัง Clipboard เพื่อให้ลูกค้าไปวางใน Facebook
      * - เปิดหน้า Facebook ของร้านค้าเพื่อส่งหลักฐานการโอน
      * - ล้างตะกร้าสินค้าหลังยืนยัน
      */
-    window.confirmPayment = () => {
+    window.confirmPayment = async () => {
         if (cart.length === 0) return showToast("ไม่มีสินค้าในตะกร้า", "error");
 
         const deliveryInfo = JSON.parse(sessionStorage.getItem('deliveryInfo') || '{}');
-        const subtotal = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
-        const shipping = 100;
-        const total = subtotal + shipping;
 
-        // สร้างข้อความสรุปรายการสั่งซื้อ
-        let orderSummary = `🛒 รายการสั่งซื้อจาก Siwabeetle Shop\n`;
-        orderSummary += `------------------------------\n`;
-        cart.forEach((item, index) => {
-            orderSummary += `${index + 1}. ${item.name} (${item.price}฿) x ${item.qty}\n`;
-        });
-        orderSummary += `------------------------------\n`;
-        orderSummary += `💰 ยอดรวมสินค้า: ${subtotal} บาท\n`;
-        orderSummary += `🚚 ค่าจัดส่ง: ${shipping} บาท\n`;
-        orderSummary += `✨ ยอดชำระทั้งหมด: ${total} บาท\n\n`;
-        orderSummary += `📍 ข้อมูลจัดส่ง:\n`;
-        orderSummary += `ชื่อ: ${deliveryInfo.name || '-'}\n`;
-        orderSummary += `เบอร์โทร: ${deliveryInfo.phone || '-'}\n`;
-        orderSummary += `ที่อยู่: ${deliveryInfo.address || '-'}\n`;
-        if (deliveryInfo.note) orderSummary += `หมายเหตุ: ${deliveryInfo.note}\n`;
-        orderSummary += `------------------------------\n`;
-        orderSummary += `✅(แจ้งชำระเงินเรียบร้อยแล้วครับ อย่าลืมแนบสลิปด้วยน้าา)`;
+        try {
+            // สร้าง Order ใน Firebase
+            showToast("กำลังบันทึกคำสั่งซื้อ...", "success");
+            const order = await createOrder(cart, deliveryInfo);
 
-        // คัดลอกไปยัง Clipboard
-        navigator.clipboard.writeText(orderSummary).then(() => {
-            showToast("คัดลอกรายละเอียดคำสั่งซื้อแล้ว! กรุณาวางข้อความในแชท Facebook", "success");
+            // สร้างข้อความสรุปรายการสั่งซื้อ (พร้อม OrderID)
+            let orderSummary = `🛒 รายการสั่งซื้อจาก Siwabeetle Shop\n`;
+            orderSummary += `📋 หมายเลขคำสั่งซื้อ: ${order.orderId}\n`;
+            orderSummary += `📅 วันที่: ${new Date(order.createdAt).toLocaleString('th-TH')}\n`;
+            orderSummary += `------------------------------\n`;
+            cart.forEach((item, index) => {
+                orderSummary += `${index + 1}. ${item.name} (${item.price}฿) x ${item.qty}\n`;
+            });
+            orderSummary += `------------------------------\n`;
+            orderSummary += `💰 ยอดรวมสินค้า: ${order.subtotal} บาท\n`;
+            orderSummary += `🚚 ค่าจัดส่ง: ${order.shipping} บาท\n`;
+            orderSummary += `✨ ยอดชำระทั้งหมด: ${order.total} บาท\n\n`;
+            orderSummary += `📍 ข้อมูลจัดส่ง:\n`;
+            orderSummary += `ชื่อ: ${deliveryInfo.name || '-'}\n`;
+            orderSummary += `เบอร์โทร: ${deliveryInfo.phone || '-'}\n`;
+            orderSummary += `ที่อยู่: ${deliveryInfo.address || '-'}\n`;
+            if (deliveryInfo.note) orderSummary += `หมายเหตุ: ${deliveryInfo.note}\n`;
+            orderSummary += `------------------------------\n`;
+            orderSummary += `✅(แจ้งชำระเงินเรียบร้อยแล้วครับ อย่าลืมแนบสลิปด้วยน้าา)`;
+
+            // คัดลอกไปยัง Clipboard
+            try {
+                await navigator.clipboard.writeText(orderSummary);
+                showToast(`บันทึกคำสั่งซื้อ ${order.orderId} แล้ว! กรุณาวางข้อความในแชท Facebook`, "success");
+            } catch (clipErr) {
+                console.warn('Clipboard copy failed:', clipErr);
+                showToast(`บันทึกคำสั่งซื้อ ${order.orderId} แล้ว!`, "success");
+            }
 
             // รอให้ Toast แสดงซักครู่ก่อนเปิด Facebook
             setTimeout(() => {
                 window.open('https://www.facebook.com/siwakorn.bunde.2024', '_blank');
                 window.closePayment();
+                // Close cart modal too
+                const cartModal = getEl('cart-modal');
+                if (cartModal) cartModal.classList.remove('active');
                 // Reset cart after payment confirmation
                 cart = [];
                 updateCartUI();
-            }, 1500);
-        }).catch(err => {
-            console.error('ไม่สามารถคัดลอกข้อความได้:', err);
-            // Fallback: ถ้าคัดลอกไม่ได้ ก็เปิด Facebook เลย แต่อาจจะแจ้งเตือนผู้ใช้
-            window.open('https://www.facebook.com/siwakorn.bunde.2024', '_blank');
-            window.closePayment();
-            cart = [];
-            updateCartUI();
-        });
+            }, 2000);
+
+        } catch (err) {
+            console.error('Error creating order:', err);
+            showToast("เกิดข้อผิดพลาดในการบันทึกคำสั่งซื้อ กรุณาลองใหม่", "error");
+        }
     };
 
     /**
@@ -1138,45 +1472,284 @@
      * ฟังก์ชันเปิด modal จัดการร้านค้า (สำหรับ Admin เท่านั้น)
      * - ตรวจสอบว่าผู้ใช้เป็น 'siwakon' หรือไม่
      * - แสดงรายการสินค้าทั้งหมดพร้อมช่องแก้ไข stock
+     * - แสดง Dashboard วิเคราะห์ยอดขาย
      */
-    window.toggleAdminLogin = () => {
+    window.toggleAdminLogin = async () => {
         if (userProfile && userProfile.username.toLowerCase() === 'siwakon') {
             const adminModal = getEl('admin-modal');
             if (adminModal) {
                 adminModal.classList.add('active');
-                renderAdminProducts();
+                await renderAdminDashboard();
             }
         }
     };
 
     /**
-     * ฟังก์ชันแสดงรายการสินค้าในหน้า Admin
-     * - สร้าง element สำหรับแต่ละสินค้าพร้อมช่อง input สำหรับแก้ไข stock
+     * Current admin tab state
      */
-    function renderAdminProducts() {
+    let currentAdminTab = 'analytics';
+
+    /**
+     * Switch admin tab
+     */
+    window.switchAdminTab = async (tab) => {
+        currentAdminTab = tab;
+        await renderAdminDashboard();
+    };
+
+    /**
+     * Render the complete admin dashboard with tabs
+     */
+    async function renderAdminDashboard() {
         const container = getEl('admin-product-list');
         if (!container) return;
-        container.innerHTML = '';
+
+        // Create tabs header
+        const tabsHTML = `
+            <div class="admin-tabs" style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px;">
+                <button class="admin-tab ${currentAdminTab === 'analytics' ? 'active' : ''}" 
+                    onclick="switchAdminTab('analytics')"
+                    style="flex: 1; padding: 12px 20px; background: ${currentAdminTab === 'analytics' ? 'var(--grad-gold)' : 'rgba(255,255,255,0.05)'}; 
+                           color: ${currentAdminTab === 'analytics' ? 'var(--deep-forest)' : 'white'}; 
+                           border: none; border-radius: 10px; cursor: pointer; font-weight: 600; font-family: inherit;
+                           transition: all 0.3s ease;">
+                    <i class="fa-solid fa-chart-line"></i> สถิติยอดขาย
+                </button>
+                <button class="admin-tab ${currentAdminTab === 'stock' ? 'active' : ''}" 
+                    onclick="switchAdminTab('stock')"
+                    style="flex: 1; padding: 12px 20px; background: ${currentAdminTab === 'stock' ? 'var(--grad-gold)' : 'rgba(255,255,255,0.05)'}; 
+                           color: ${currentAdminTab === 'stock' ? 'var(--deep-forest)' : 'white'}; 
+                           border: none; border-radius: 10px; cursor: pointer; font-weight: 600; font-family: inherit;
+                           transition: all 0.3s ease;">
+                    <i class="fa-solid fa-boxes-stacked"></i> จัดการสต็อก
+                </button>
+                <button class="admin-tab ${currentAdminTab === 'orders' ? 'active' : ''}" 
+                    onclick="switchAdminTab('orders')"
+                    style="flex: 1; padding: 12px 20px; background: ${currentAdminTab === 'orders' ? 'var(--grad-gold)' : 'rgba(255,255,255,0.05)'}; 
+                           color: ${currentAdminTab === 'orders' ? 'var(--deep-forest)' : 'white'}; 
+                           border: none; border-radius: 10px; cursor: pointer; font-weight: 600; font-family: inherit;
+                           transition: all 0.3s ease;">
+                    <i class="fa-solid fa-receipt"></i> คำสั่งซื้อ
+                </button>
+            </div>
+            <div id="admin-tab-content"></div>
+        `;
+
+        container.innerHTML = tabsHTML;
+
+        const contentContainer = getEl('admin-tab-content');
+        if (!contentContainer) return;
+
+        if (currentAdminTab === 'analytics') {
+            await renderAnalyticsTab(contentContainer);
+        } else if (currentAdminTab === 'stock') {
+            renderStockTab(contentContainer);
+        } else if (currentAdminTab === 'orders') {
+            await renderOrdersTab(contentContainer);
+        }
+    }
+
+    /**
+     * Render analytics dashboard tab
+     */
+    async function renderAnalyticsTab(container) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 40px;">
+                <i class="fa-solid fa-spinner fa-spin" style="font-size: 2rem; color: var(--moss-green);"></i>
+                <p style="margin-top: 15px; color: var(--light-moss);">กำลังโหลดข้อมูล...</p>
+            </div>
+        `;
+
+        try {
+            const orders = await getAllOrders();
+            const analytics = calculateAnalytics(orders);
+
+            container.innerHTML = `
+                <!-- Stats Cards -->
+                <div class="analytics-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 25px;">
+                    <div class="stat-card" style="background: linear-gradient(135deg, rgba(64,145,108,0.3), rgba(64,145,108,0.1)); 
+                         padding: 20px; border-radius: 15px; border: 1px solid rgba(64,145,108,0.3); text-align: center;">
+                        <div style="font-size: 0.8rem; color: var(--light-moss); margin-bottom: 8px; text-transform: uppercase;">
+                            <i class="fa-solid fa-calendar-day"></i> ยอดขายวันนี้
+                        </div>
+                        <div style="font-size: 1.8rem; font-weight: 800; color: #40916c;">${analytics.todayRevenue.toLocaleString('th-TH')} ฿</div>
+                        <div style="font-size: 0.75rem; color: var(--light-moss); margin-top: 5px;">${analytics.todayOrders} คำสั่งซื้อ</div>
+                    </div>
+                    
+                    <div class="stat-card" style="background: linear-gradient(135deg, rgba(212,175,55,0.3), rgba(212,175,55,0.1)); 
+                         padding: 20px; border-radius: 15px; border: 1px solid rgba(212,175,55,0.3); text-align: center;">
+                        <div style="font-size: 0.8rem; color: var(--dappled-gold); margin-bottom: 8px; text-transform: uppercase;">
+                            <i class="fa-solid fa-calendar-week"></i> ยอดขายเดือนนี้
+                        </div>
+                        <div style="font-size: 1.8rem; font-weight: 800; color: var(--dappled-gold);">${analytics.monthRevenue.toLocaleString('th-TH')} ฿</div>
+                        <div style="font-size: 0.75rem; color: var(--light-moss); margin-top: 5px;">${analytics.monthOrders} คำสั่งซื้อ</div>
+                    </div>
+                    
+                    <div class="stat-card" style="background: linear-gradient(135deg, rgba(82,183,136,0.3), rgba(82,183,136,0.1)); 
+                         padding: 20px; border-radius: 15px; border: 1px solid rgba(82,183,136,0.3); text-align: center;">
+                        <div style="font-size: 0.8rem; color: var(--light-moss); margin-bottom: 8px; text-transform: uppercase;">
+                            <i class="fa-solid fa-chart-pie"></i> ยอดขายรวมทั้งหมด
+                        </div>
+                        <div style="font-size: 1.8rem; font-weight: 800; color: #52b788;">${analytics.totalRevenue.toLocaleString('th-TH')} ฿</div>
+                        <div style="font-size: 0.75rem; color: var(--light-moss); margin-top: 5px;">${analytics.totalOrders} คำสั่งซื้อ</div>
+                    </div>
+                </div>
+
+                <!-- Top Products Section -->
+                <div class="top-products-section" style="background: rgba(0,0,0,0.2); padding: 20px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.1);">
+                    <h4 style="color: var(--dappled-gold); margin-bottom: 15px; font-size: 1rem;">
+                        <i class="fa-solid fa-trophy"></i> สินค้าขายดี (Top 5)
+                    </h4>
+                    ${analytics.topProducts.length > 0 ? `
+                        <div class="top-products-list">
+                            ${analytics.topProducts.map((product, idx) => `
+                                <div style="display: flex; align-items: center; gap: 12px; padding: 12px 0; 
+                                     ${idx < analytics.topProducts.length - 1 ? 'border-bottom: 1px solid rgba(255,255,255,0.05);' : ''}">
+                                    <div style="width: 30px; height: 30px; background: ${idx === 0 ? 'linear-gradient(135deg, #FFD700, #FFA500)' : idx === 1 ? 'linear-gradient(135deg, #C0C0C0, #A9A9A9)' : idx === 2 ? 'linear-gradient(135deg, #CD7F32, #8B4513)' : 'rgba(255,255,255,0.1)'}; 
+                                         border-radius: 50%; display: flex; align-items: center; justify-content: center; 
+                                         font-weight: 700; font-size: 0.8rem; color: ${idx < 3 ? '#1a1a2e' : 'white'};">
+                                        ${idx + 1}
+                                    </div>
+                                    <div style="flex: 1;">
+                                        <div style="font-size: 0.9rem; font-weight: 600; color: white;">${sanitizeHTML(product.name)}</div>
+                                        <div style="font-size: 0.75rem; color: var(--light-moss);">ขายได้ ${product.qty} ชิ้น</div>
+                                    </div>
+                                    <div style="text-align: right;">
+                                        <div style="font-size: 0.9rem; font-weight: 700; color: var(--dappled-gold);">${product.revenue.toLocaleString('th-TH')} ฿</div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : `
+                        <p style="text-align: center; color: var(--light-moss); opacity: 0.6; padding: 30px 0;">
+                            <i class="fa-solid fa-box-open" style="font-size: 2rem; display: block; margin-bottom: 10px;"></i>
+                            ยังไม่มีข้อมูลการขาย
+                        </p>
+                    `}
+                </div>
+            `;
+        } catch (err) {
+            console.error('Error loading analytics:', err);
+            container.innerHTML = `
+                <div style="text-align: center; padding: 40px; color: #ff6b6b;">
+                    <i class="fa-solid fa-triangle-exclamation" style="font-size: 2rem;"></i>
+                    <p style="margin-top: 15px;">เกิดข้อผิดพลาดในการโหลดข้อมูล</p>
+                </div>
+            `;
+        }
+    }
+
+    /**
+     * Render stock management tab
+     */
+    function renderStockTab(container) {
+        let stockHTML = '';
 
         products.forEach(p => {
             if (!p || !p.name || p.name === 'สินค้าไม่ได้ระบุชื่อ') return;
-            const div = document.createElement('div');
-            div.className = 'admin-product-item';
-            div.style = "display: flex; align-items: center; gap: 15px; background: rgba(255,255,255,0.03); padding: 10px; border-radius: 8px; margin-bottom: 10px;";
-            div.innerHTML = `
-                <img src="${p.image}" style="width: 50px; height: 50px; border-radius: 5px; object-fit: cover;">
-                <div style="flex: 1;">
-                    <div style="font-size: 0.9rem; font-weight: 600;">${p.name}</div>
-                    <div style="font-size: 0.8rem; opacity: 0.7;">ID: ${p.id}</div>
-                </div>
-                <div style="width: 80px;">
-                    <label style="font-size: 0.7rem; display: block; margin-bottom: 3px;">สต็อก</label>
-                    <input type="number" value="${p.stock}" id="stock-input-${p.id}" 
-                        style="width: 100%; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 4px; padding: 4px;">
+            stockHTML += `
+                <div class="admin-product-item" style="display: flex; align-items: center; gap: 15px; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 10px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.05);">
+                    <img src="${p.image}" style="width: 50px; height: 50px; border-radius: 8px; object-fit: cover;" onerror="this.src='https://placehold.co/50x50?text=No+Image'">
+                    <div style="flex: 1;">
+                        <div style="font-size: 0.9rem; font-weight: 600; color: white;">${sanitizeHTML(p.name)}</div>
+                        <div style="font-size: 0.75rem; color: var(--light-moss); opacity: 0.7;">ID: ${p.id} | ${p.price} ฿</div>
+                    </div>
+                    <div style="width: 90px;">
+                        <label style="font-size: 0.7rem; display: block; margin-bottom: 5px; color: var(--light-moss);">สต็อก</label>
+                        <input type="number" value="${p.stock}" id="stock-input-${p.id}" min="0"
+                            style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: white; border-radius: 6px; padding: 8px; text-align: center; font-weight: 600;">
+                    </div>
                 </div>
             `;
-            container.appendChild(div);
         });
+
+        container.innerHTML = stockHTML || '<p style="text-align: center; color: var(--light-moss);">ไม่พบสินค้า</p>';
+    }
+
+    /**
+     * Render orders management tab
+     */
+    async function renderOrdersTab(container) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 40px;">
+                <i class="fa-solid fa-spinner fa-spin" style="font-size: 2rem; color: var(--moss-green);"></i>
+                <p style="margin-top: 15px; color: var(--light-moss);">กำลังโหลดคำสั่งซื้อ...</p>
+            </div>
+        `;
+
+        try {
+            const orders = await getAllOrders();
+
+            // Sort by date descending
+            orders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+            if (orders.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: var(--light-moss);">
+                        <i class="fa-solid fa-receipt" style="font-size: 2rem; opacity: 0.5;"></i>
+                        <p style="margin-top: 15px;">ยังไม่มีคำสั่งซื้อ</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let ordersHTML = '';
+            orders.slice(0, 20).forEach(order => {
+                const statusColors = {
+                    'pending_payment': { bg: 'rgba(255,193,7,0.2)', color: '#ffc107', text: 'รอชำระเงิน' },
+                    'paid': { bg: 'rgba(40,167,69,0.2)', color: '#28a745', text: 'ชำระแล้ว' },
+                    'shipped': { bg: 'rgba(0,123,255,0.2)', color: '#007bff', text: 'จัดส่งแล้ว' },
+                    'completed': { bg: 'rgba(82,183,136,0.2)', color: '#52b788', text: 'สำเร็จ' },
+                    'cancelled': { bg: 'rgba(220,53,69,0.2)', color: '#dc3545', text: 'ยกเลิก' }
+                };
+                const status = statusColors[order.status] || statusColors['pending_payment'];
+                const orderDate = new Date(order.createdAt).toLocaleString('th-TH', {
+                    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                });
+
+                ordersHTML += `
+                    <div class="order-card" style="background: rgba(255,255,255,0.03); padding: 15px; border-radius: 12px; margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.05);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <div>
+                                <div style="font-size: 0.9rem; font-weight: 700; color: var(--dappled-gold);">${order.orderId}</div>
+                                <div style="font-size: 0.75rem; color: var(--light-moss); opacity: 0.7;">${orderDate}</div>
+                            </div>
+                            <span style="padding: 5px 12px; background: ${status.bg}; color: ${status.color}; border-radius: 20px; font-size: 0.75rem; font-weight: 600;">
+                                ${status.text}
+                            </span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.05);">
+                            <div style="font-size: 0.85rem; color: white;">
+                                <i class="fa-solid fa-user"></i> ${sanitizeHTML(order.deliveryInfo?.name || order.userName || '-')}
+                            </div>
+                            <div style="font-size: 1rem; font-weight: 700; color: white;">
+                                ${order.total?.toLocaleString('th-TH')} ฿
+                            </div>
+                        </div>
+                        <div style="font-size: 0.75rem; color: var(--light-moss); margin-top: 8px;">
+                            ${order.items?.length || 0} รายการ | ${order.items?.reduce((sum, i) => sum + (i.qty || 0), 0) || 0} ชิ้น
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = ordersHTML;
+        } catch (err) {
+            console.error('Error loading orders:', err);
+            container.innerHTML = `
+                <div style="text-align: center; padding: 40px; color: #ff6b6b;">
+                    <i class="fa-solid fa-triangle-exclamation" style="font-size: 2rem;"></i>
+                    <p style="margin-top: 15px;">เกิดข้อผิดพลาดในการโหลดข้อมูล</p>
+                </div>
+            `;
+        }
+    }
+
+    /**
+     * ฟังก์ชันแสดงรายการสินค้าในหน้า Admin (Legacy - kept for compatibility)
+     */
+    function renderAdminProducts() {
+        renderAdminDashboard();
     }
 
     /**
@@ -1194,13 +1767,11 @@
         });
 
         // Save the entire products array back to Firebase
-        // This is more robust than partial updates if indices shifted
         database.ref('products').set(products).then(() => {
             showToast("บันทึกสต็อกสินค้าเรียบร้อยแล้ว");
             window.closeAdminModal();
         }).catch(err => {
             console.error("Firebase Save Error:", err);
-            // Show more detailed error if possible
             const errorMsg = err.message || "เกิดข้อผิดพลาดในการบันทึกข้อมูล";
             showToast(errorMsg, "error");
         });
@@ -1212,6 +1783,7 @@
     window.closeAdminModal = () => {
         const modal = getEl('admin-modal');
         if (modal) modal.classList.remove('active');
+        currentAdminTab = 'analytics'; // Reset to default tab
     };
 
     // Start
