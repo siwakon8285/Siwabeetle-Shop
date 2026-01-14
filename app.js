@@ -70,7 +70,7 @@
             category: "larva",
             price: 250,
             image: "images/larva_stage_1.jpg",
-            stock: 5,
+            stock: 0,
             description: "ตัวอ่อนด้วงสามเขา ระยะที่ 1 พร้อมเข้าดักแด้"
         },
         {
@@ -106,7 +106,7 @@
             category: "accessory",
             price: 280,
             image: "https://filebroker-cdn.lazada.co.th/kf/S339519f961f240d38f530a003ff44e88a.jpg",
-            stock: 10,
+            stock: 0,
             description: "กล่องเลี้ยงด้วง พร้อมตู้ดิน และอาหาร"
         },
         {
@@ -115,7 +115,7 @@
             category: "accessory",
             price: 180,
             image: "https://down-th.img.susercontent.com/file/44abb54911ce45ecee05754183b5669e_tn.webp",
-            stock: 3,
+            stock: 0,
             description: "แมทหมักคุณภาพสูงสำหรับด้วง"
         },
         {
@@ -173,14 +173,27 @@
         firebase.initializeApp(firebaseConfig);
     }
     const database = firebase.database();
+    const auth = firebase.auth();
 
     let cart = [];
     let userProfile = null;
     let products = [...defaultProducts];
     let pendingItemId = null;
 
+    /**
+     * ฟังก์ชันลัดสำหรับดึง element ด้วย ID
+     * @param {string} id - ID ของ element ที่ต้องการ
+     * @returns {HTMLElement|null} - element ที่พบ หรือ null
+     */
     const getEl = (id) => document.getElementById(id);
 
+    /**
+     * ฟังก์ชันเริ่มต้นการทำงานของแอปพลิเคชัน
+     * - แสดงสินค้าทั้งหมดบนหน้าเว็บ
+     * - เชื่อมต่อกับ Firebase และรับข้อมูลสินค้าแบบ real-time
+     * - อัปเดต UI ตะกร้าและสถานะผู้ใช้
+     * - ตั้งค่า Event Listeners ทั้งหมด
+     */
     function init() {
         console.log("Siwabeetle Shop: Initializing...");
 
@@ -228,8 +241,41 @@
         }
 
         updateCartUI();
-        updateLoginStatus();
         setupEventListeners();
+
+        // Listen for Authentication state changes
+        auth.onAuthStateChanged(async (user) => {
+            if (user) {
+                console.log("User is logged in:", user.uid);
+                // Fetch extra profile data from Database
+                try {
+                    const snapshot = await database.ref('users/' + user.uid).once('value');
+                    const userData = snapshot.val();
+
+                    userProfile = {
+                        uid: user.uid,
+                        email: user.email,
+                        username: userData?.username || 'User',
+                        avatar: userData?.avatar || 'images/beetle_avatar.png'
+                    };
+
+                    if (userData?.deliveryInfo) {
+                        sessionStorage.setItem('deliveryInfo', JSON.stringify(userData.deliveryInfo));
+                    }
+
+                    sessionStorage.setItem('user', JSON.stringify(userProfile));
+                } catch (err) {
+                    console.error("Error fetching user profile:", err);
+                }
+            } else {
+                console.log("User is logged out");
+                userProfile = null;
+                sessionStorage.removeItem('user');
+                sessionStorage.removeItem('deliveryInfo');
+            }
+            updateLoginStatus();
+        });
+
         console.log("Siwabeetle Shop: Ready.");
     }
 
@@ -242,16 +288,25 @@
         'images/beetle_avatar_5.png'
     ];
 
+    /**
+     * ฟังก์ชันสลับการแสดง/ซ่อนตัวเลือกอวาตาร์
+     * เมื่อกดปุ่มกล้องจะเปิด/ปิดแถบเลือกรูปโปรไฟล์
+     */
     window.toggleAvatarSelection = () => {
         const grid = getEl('avatar-selection');
         if (grid) grid.style.display = grid.style.display === 'none' ? 'block' : 'none';
     };
 
+    /**
+     * ฟังก์ชันเลือกและบันทึกอวาตาร์ใหม่
+     * @param {string} url - URL ของรูปอวาตาร์ที่เลือก
+     * บันทึกลง Firebase และ sessionStorage แล้วอัปเดตหน้าโปรไฟล์
+     */
     window.selectAvatar = async (url) => {
-        if (!userProfile || !userProfile.username) return;
+        if (!userProfile || !userProfile.uid) return;
 
         try {
-            await database.ref('users/' + userProfile.username + '/avatar').set(url);
+            await database.ref('users/' + userProfile.uid + '/avatar').set(url);
             userProfile.avatar = url;
             sessionStorage.setItem('user', JSON.stringify(userProfile));
             updateLoginStatus();
@@ -263,21 +318,70 @@
         }
     };
 
+    /**
+     * ฟังก์ชันเปิด/ปิดการแสดงรหัสผ่าน
+     */
+    window.togglePasswordVisibility = (inputId, btn) => {
+        const input = getEl(inputId);
+        const icon = btn.querySelector('i');
+        if (input.type === 'password') {
+            input.type = 'text';
+            icon.classList.remove('fa-eye');
+            icon.classList.add('fa-eye-slash');
+        } else {
+            input.type = 'password';
+            icon.classList.remove('fa-eye-slash');
+            icon.classList.add('fa-eye');
+        }
+    };
+
+    /**
+     * ฟังก์ชันเปิด/ปิดส่วนแก้ไขชื่อผู้ใช้
+     */
+    window.toggleEditUsername = () => {
+        const group = getEl('edit-username-group');
+        const input = getEl('new-username-input');
+        if (group.style.display === 'none' || !group.style.display) {
+            group.style.display = 'block';
+            input.value = userProfile.username;
+            input.focus();
+        } else {
+            group.style.display = 'none';
+        }
+    };
+
+    /**
+     * ฟังก์ชันบันทึกชื่อผู้ใช้ใหม่
+     */
+    window.updateUsername = async () => {
+        const newName = getEl('new-username-input').value.trim();
+        if (!newName) return showToast("กรุณากรอกชื่อ", "error");
+        if (newName === userProfile.username) return window.toggleEditUsername();
+
+        try {
+            await database.ref('users/' + userProfile.uid + '/username').set(newName);
+            userProfile.username = newName;
+            sessionStorage.setItem('user', JSON.stringify(userProfile));
+            updateLoginStatus();
+            window.toggleEditUsername();
+            showToast("เปลี่ยนชื่อผู้ใช้เรียบร้อย");
+        } catch (err) {
+            console.error("Update Username Error:", err);
+            showToast("ไม่สามารถเปลี่ยนชื่อได้", "error");
+        }
+    };
+
+    /**
+     * ฟังก์ชันอัปเดตสถานะการเข้าสู่ระบบ
+     * - ตรวจสอบว่ามีผู้ใช้ล็อกอินอยู่หรือไม่
+     * - แสดงรูปโปรไฟล์หรือไอคอนผู้ใช้ตามสถานะ
+     * - แสดง/ซ่อนฟอร์มล็อกอิน หรือหน้าโปรไฟล์
+     * - แสดงข้อมูลจัดส่งของผู้ใช้
+     * - แสดงปุ่มจัดการร้านค้าสำหรับ admin เท่านั้น
+     */
     function updateLoginStatus() {
         const trigger = getEl('login-trigger');
         if (!trigger) return;
-
-        const saved = sessionStorage.getItem('user');
-        if (saved) {
-            try {
-                userProfile = JSON.parse(saved);
-            } catch (e) {
-                console.error("Session parse error", e);
-                userProfile = null;
-            }
-        } else {
-            userProfile = null;
-        }
 
         const loginForm = getEl('login-form');
         const registerForm = getEl('register-form');
@@ -292,7 +396,11 @@
             if (registerForm) registerForm.style.display = 'none';
             if (profileView) profileView.style.display = 'block';
             if (modalTitle) modalTitle.textContent = 'โปรไฟล์ของคุณ';
+
             if (userDisplay) userDisplay.textContent = userProfile.username;
+
+            const emailDisplay = getEl('profile-email-display');
+            if (emailDisplay) emailDisplay.textContent = userProfile.email || '';
 
             // Render Avatar
             const avatarImg = getEl('profile-avatar-img');
@@ -307,49 +415,66 @@
                 if (savedInfo) {
                     const info = JSON.parse(savedInfo);
                     deliveryContent.innerHTML = `
-                    <div style="margin-bottom: 5px;"><strong>ชื่อ:</strong> ${info.name}</div>
-                    <div style="margin-bottom: 5px;"><strong>โทร:</strong> ${info.phone}</div>
-                    <div style="margin-bottom: 5px; word-break: break-word;"><strong>ที่อยู่:</strong> ${info.address}</div>
-                    ${info.note ? `<div style="word-break: break-word; color: var(--dappled-gold); font-size: 0.85rem; background: rgba(0,0,0,0.2); padding: 5px; border-radius: 4px; border-left: 2px solid var(--dappled-gold);"><strong>หมายเหตุ:</strong> ${info.note}</div>` : ''}
+                    <div style="margin-bottom: 8px;"><strong><i class="fa-solid fa-user-tag" style="width: 20px;"></i></strong> ${info.name}</div>
+                    <div style="margin-bottom: 8px;"><strong><i class="fa-solid fa-phone" style="width: 20px;"></i></strong> ${info.phone}</div>
+                    <div style="margin-bottom: 8px; word-break: break-word;"><strong><i class="fa-solid fa-location-dot" style="width: 20px;"></i></strong> ${info.address}</div>
+                    ${info.note ? `<div style="word-break: break-word; color: var(--dappled-gold); font-size: 0.85rem; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; border-left: 3px solid var(--dappled-gold); margin-top: 10px;"><strong>หมายเหตุ:</strong> ${info.note}</div>` : ''}
                 `;
                 } else {
-                    deliveryContent.innerHTML = `<p style="opacity: 0.7; color: #ffadad;">ยังไม่มีข้อมูลจัดส่ง<br><small>(กรุณาระบุข้อมูลสำหรับตัวคุณเอง)</small></p>`;
+                    deliveryContent.innerHTML = `<p style="opacity: 0.5; font-style: italic;">ยังไม่มีข้อมูลจัดส่ง</p>`;
                 }
             }
 
-            // Show admin button only for 'siwakon' (case-insensitive)
+            // Show admin button for specific UID or Email if needed
             if (adminBtn) {
-                adminBtn.style.display = (userProfile.username && userProfile.username.toLowerCase() === 'siwakon') ? 'block' : 'none';
+                const isAdmin = (userProfile.username && userProfile.username.toLowerCase() === 'siwakon') || userProfile.email === 'admin@siwabeetle.com';
+                adminBtn.style.display = isAdmin ? 'block' : 'none';
             }
-        } else {
+        }
+        else {
             trigger.innerHTML = '<i class="fa-solid fa-user"></i>';
             if (profileView) profileView.style.display = 'none';
-            // Default to login form if not logged in
             if (loginForm) loginForm.style.display = 'block';
             if (registerForm) registerForm.style.display = 'none';
             if (modalTitle) modalTitle.textContent = 'เข้าสู่ระบบ';
         }
     }
 
+    /**
+     * ฟังก์ชันออกจากระบบ
+     * - ล้างข้อมูลผู้ใช้จาก sessionStorage
+     * - ล้างข้อมูลจัดส่ง
+     * - แสดงข้อความแจ้งเตือน
+     * - ปิด modal และอัปเดต UI
+     */
     window.handleLogout = () => {
-        userProfile = null;
-        sessionStorage.removeItem('user');
-        sessionStorage.removeItem('deliveryInfo');
-        showToast("ออกจากระบบแล้ว");
-        updateLoginStatus();
-        window.closeLoginModal();
+        auth.signOut().then(() => {
+            showToast("ออกจากระบบแล้ว");
+            window.closeLoginModal();
+        }).catch(err => {
+            console.error("Logout Error:", err);
+        });
     };
 
+    /**
+     * ฟังก์ชันลบบัญชีผู้ใช้
+     * - ขอยืนยันจากผู้ใช้ก่อนลบ
+     * - ลบข้อมูลผู้ใช้จาก Firebase
+     * - ออกจากระบบหลังลบสำเร็จ
+     */
     window.handleDeleteAccount = async () => {
-        if (!userProfile || !userProfile.username) return;
+        const user = auth.currentUser;
+        if (!user) return;
 
-        const confirmDelete = confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบบัญชี "${userProfile.username}"?\nการดำเนินการนี้จะลบข้อมูลที่อยู่จัดส่งและประวัติทั้งหมดถาวร ไม่สามารถกู้คืนได้`);
+        const confirmDelete = confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบบัญชีนี้?\nการดำเนินการนี้จะลบข้อมูลที่อยู่จัดส่งและประวัติทั้งหมดถาวร ไม่สามารถกู้คืนได้`);
 
         if (confirmDelete) {
             try {
-                await database.ref('users/' + userProfile.username).remove();
+                // Delete from Database first
+                await database.ref('users/' + user.uid).remove();
+                // Then delete from Auth
+                await user.delete();
                 showToast("ลบบัญชีผู้ใช้งานเรียบร้อยแล้ว");
-                window.handleLogout();
             } catch (err) {
                 console.error("Delete Account Error:", err);
                 showToast("เกิดข้อผิดพลาดในการลบบัญชี", "error");
@@ -357,6 +482,13 @@
         }
     };
 
+    /**
+     * ฟังก์ชันแสดงสินค้าบนหน้าเว็บ
+     * @param {string} filter - หมวดหมู่ที่ต้องการกรอง ('all', 'adult', 'larva', 'set', 'accessory')
+     * - กรองสินค้าตามหมวดหมู่
+     * - สร้าง card สินค้าพร้อมรูปภาพ ราคา และจำนวนคงเหลือ
+     * - แสดงสถานะ "หมดชั่วคราว" สำหรับสินค้าที่ stock เป็น 0
+     */
     function renderProducts(filter) {
         const container = getEl('product-container');
         if (!container) return;
@@ -419,6 +551,13 @@
         console.log(`Successfully rendered ${filtered.length} products`);
     }
 
+    /**
+     * ฟังก์ชันเพิ่มสินค้าลงตะกร้า
+     * @param {number} id - ID ของสินค้าที่ต้องการเพิ่ม
+     * - ตรวจสอบว่าผู้ใช้ล็อกอินและมีข้อมูลจัดส่งหรือยัง
+     * - ลดจำนวน stock ใน Firebase
+     * - เพิ่มสินค้าลงตะกร้าหรือเพิ่มจำนวน
+     */
     window.addToCart = (id) => {
         const user = sessionStorage.getItem('user');
         if (!user) {
@@ -468,6 +607,12 @@
         }
     };
 
+    /**
+     * ฟังก์ชันแสดงรายการสินค้าในตะกร้า
+     * - สร้าง element สำหรับแต่ละสินค้าในตะกร้า
+     * - คำนวณยอดรวมสินค้า ค่าจัดส่ง และยอดรวมทั้งหมด
+     * - มีปุ่มเพิ่ม/ลดจำนวน และลบสินค้า
+     */
     function renderCart() {
         const container = getEl('cart-items-container');
         if (!container) return;
@@ -507,6 +652,13 @@
         if (getEl('total-amount')) getEl('total-amount').innerText = total; // For payment modal
     }
 
+    /**
+     * ฟังก์ชันอัปเดตจำนวนสินค้าในตะกร้า
+     * @param {number} id - ID ของสินค้า
+     * @param {number} delta - การเปลี่ยนแปลง (1 = เพิ่ม, -1 = ลด)
+     * - เพิ่ม/ลดจำนวนสินค้าในตะกร้า
+     * - อัปเดต stock ใน Firebase ตามการเปลี่ยนแปลง
+     */
     window.updateCartQty = (id, delta) => {
         const cIndex = cart.findIndex(x => x.id === id);
         const pIndex = products.findIndex(x => x.id === id);
@@ -538,6 +690,12 @@
         updateCartUI();
     };
 
+    /**
+     * ฟังก์ชันลบสินค้าออกจากตะกร้า
+     * @param {number} id - ID ของสินค้าที่ต้องการลบ
+     * - คืน stock กลับไปใน Firebase
+     * - ลบสินค้าออกจากตะกร้า
+     */
     window.removeFromCart = (id) => {
         const cIndex = cart.findIndex(x => x.id === id);
         const pIndex = products.findIndex(x => x.id === id);
@@ -555,6 +713,11 @@
         }
     };
 
+    /**
+     * ฟังก์ชันอัปเดต UI ตะกร้าสินค้า
+     * - อัปเดตจำนวนสินค้าบน badge
+     * - เรียก renderCart เพื่อวาดรายการสินค้าใหม่
+     */
     function updateCartUI() {
         const countBadge = getEl('cart-count');
         if (countBadge) {
@@ -564,16 +727,28 @@
         renderCart();
     }
 
+    /**
+     * ฟังก์ชันปิด modal เข้าสู่ระบบ/โปรไฟล์
+     */
     window.closeLoginModal = () => {
         const modal = getEl('login-modal');
         if (modal) modal.classList.remove('active');
     };
 
+    /**
+     * ฟังก์ชันสลับโหมดระหว่างล็อกอินและสมัครสมาชิก
+     */
     window.toggleAuthMode = () => {
         const modal = getEl('login-modal');
         if (modal) modal.classList.toggle('reg-mode');
     };
 
+    /**
+     * ฟังก์ชันแสดงข้อความแจ้งเตือน (Toast Notification)
+     * @param {string} msg - ข้อความที่ต้องการแสดง
+     * @param {string} type - ประเภทการแจ้งเตือน ('success', 'error', 'warning')
+     * Toast จะหายไปอัตโนมัติหลัง 3 วินาที
+     */
     function showToast(msg, type = "success") {
         const container = getEl('toast-container');
         if (!container) { console.log(`[${type}] ${msg}`); return; }
@@ -587,96 +762,109 @@
         }, 3000);
     }
 
+    /**
+     * ฟังก์ชันจัดการการเข้าสู่ระบบ
+     * @param {Event} e - event จากฟอร์ม submit
+     * - ตรวจสอบ username และ password จาก Firebase
+     * - บันทึกข้อมูลผู้ใช้ลง sessionStorage
+     * - โหลดข้อมูลจัดส่งจาก Firebase (ถ้ามี)
+     * - เพิ่มสินค้าที่ค้างอยู่ลงตะกร้า (ถ้ามี)
+     */
     async function handleLogin(e) {
         e.preventDefault();
-        const username = getEl('login-username')?.value?.trim();
+        const email = getEl('login-email')?.value?.trim();
         const password = getEl('login-password')?.value;
-        if (!username || !password) return showToast("กรุณากรอกข้อมูล", "error");
+        if (!email || !password) return showToast("กรุณากรอกข้อมูล", "error");
 
         try {
-            const snapshot = await database.ref('users/' + username).once('value');
-            const userData = snapshot.val();
-
-            if (!userData) {
-                return showToast("ไม่พบชื่อผู้ใช้นี้", "error");
-            }
-
-            const hashedPassword = CryptoJS.SHA256(password).toString();
-            if (userData.passwordHash !== hashedPassword) {
-                return showToast("รหัสผ่านไม่ถูกต้อง", "error");
-            }
-
-            userProfile = {
-                username: userData.username,
-                avatar: userData.avatar || 'images/beetle_avatar.png'
-            };
-            sessionStorage.setItem('user', JSON.stringify(userProfile));
-
-            // Restore delivery info from Firebase if it exists
-            if (userData.deliveryInfo) {
-                sessionStorage.setItem('deliveryInfo', JSON.stringify(userData.deliveryInfo));
-            }
-
+            await auth.signInWithEmailAndPassword(email, password);
             showToast("เข้าสู่ระบบสำเร็จ");
             window.closeLoginModal();
-            updateLoginStatus();
 
-            // If there's a pending item, try to add it now
             if (pendingItemId) {
                 window.addToCart(pendingItemId);
-                // Note: pendingItemId will be cleared by either addToCart (calling it again) 
-                // or the delivery form handler if that's the next step.
-                // If it hits delivery info check, it sets pendingItemId again.
-                // If it succeeds, we should probably clear it here if it wasn't cleared.
-                // Actually, addToCart doesn't clear it. Let's check delivery handler.
             }
         } catch (err) {
             console.error("Login error:", err);
-            showToast("เกิดข้อผิดพลาด กรุณาลองใหม่", "error");
+            let errMsg = "เกิดข้อผิดพลาด กรุณาลองใหม่";
+            if (err.code === 'auth/user-not-found') errMsg = "ไม่พบผู้ใช้นี้";
+            else if (err.code === 'auth/wrong-password') errMsg = "รหัสผ่านไม่ถูกต้อง";
+            showToast(errMsg, "error");
         }
     }
 
+    /**
+     * ฟังก์ชันจัดการการสมัครสมาชิก
+     * @param {Event} e - event จากฟอร์ม submit
+     * - ตรวจสอบว่ามี username ซ้ำหรือไม่
+     * - สุ่มอวาตาร์ให้ผู้ใช้ใหม่
+     * - เข้ารหัส password ด้วย SHA256
+     * - บันทึกข้อมูลผู้ใช้ลง Firebase
+     */
     async function handleRegister(e) {
         e.preventDefault();
         const username = getEl('reg-username')?.value?.trim();
+        const email = getEl('reg-email')?.value?.trim();
         const password = getEl('reg-password')?.value;
 
-        if (!username || !password) return showToast("กรุณากรอกข้อมูลให้ครบ", "error");
-        if (password.length < 4) return showToast("รหัสผ่านต้องมีอย่างน้อย 4 ตัวอักษร", "error");
+        if (!username || !email || !password) return showToast("กรุณากรอกข้อมูลให้ครบ", "error");
+        if (password.length < 6) return showToast("รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร", "error");
 
         try {
-            // Check if username exists
-            const snapshot = await database.ref('users/' + username).once('value');
-            if (snapshot.exists()) {
-                return showToast("ชื่อผู้ใช้นี้มีอยู่แล้ว", "error");
-            }
+            const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+            const user = userCredential.user;
 
             // Assign random avatar for new user
             const randomAvatar = availableAvatars[Math.floor(Math.random() * availableAvatars.length)];
 
-            // Hash password and save
-            const hashedPassword = CryptoJS.SHA256(password).toString();
-            await database.ref('users/' + username).set({
+            // Save extra data to Database
+            await database.ref('users/' + user.uid).set({
+                uid: user.uid,
                 username: username,
-                passwordHash: hashedPassword,
+                email: email,
                 avatar: randomAvatar,
                 createdAt: new Date().toISOString()
             });
 
             showToast("สมัครสมาชิกสำเร็จ!");
-            // Switch back to login form
-            const loginForm = getEl('login-form');
-            const registerForm = getEl('register-form');
-            const modalTitle = getEl('modal-title');
-            if (registerForm) registerForm.style.display = 'none';
-            if (loginForm) loginForm.style.display = 'block';
-            if (modalTitle) modalTitle.textContent = 'เข้าสู่ระบบ';
+            window.closeLoginModal();
         } catch (err) {
             console.error("Register error:", err);
-            showToast("เกิดข้อผิดพลาด กรุณาลองใหม่", "error");
+            let errMsg = "เกิดข้อผิดพลาด กรุณาลองใหม่";
+            if (err.code === 'auth/email-already-in-use') errMsg = "อีเมลนี้ถูกใช้งานแล้ว";
+            showToast(errMsg, "error");
         }
     }
 
+    /**
+     * ฟังก์ชันส่งอีเมลรีเซ็ตรหัสผ่าน
+     */
+    async function handleResetPassword(e) {
+        e.preventDefault();
+        const email = getEl('login-email')?.value?.trim();
+        if (!email) {
+            showToast("กรุณากรอกอีเมลในช่องด้านบนก่อนกดรีเซ็ต", "error");
+            return;
+        }
+
+        try {
+            await auth.sendPasswordResetEmail(email);
+            showToast("ส่งอีเมลรีเซ็ตรหัสผ่านแล้ว! กรุณาตรวจสอบใน Inbox/Junk mail");
+        } catch (err) {
+            console.error("Reset Password Error:", err);
+            let errMsg = "เกิดข้อผิดพลาดในการส่งอีเมล";
+            if (err.code === 'auth/user-not-found') errMsg = "ไม่พบอีเมลนี้ในระบบ";
+            showToast(errMsg, "error");
+        }
+    }
+
+    /**
+     * ฟังก์ชันตั้งค่า Event Listeners ทั้งหมด
+     * - ปุ่มกรองหมวดหมู่สินค้า
+     * - ปุ่มเปิด/ปิด modal ต่างๆ
+     * - ฟอร์มล็อกอิน, สมัครสมาชิก, ข้อมูลจัดส่ง
+     * - ปุ่มตะกร้าสินค้า
+     */
     function setupEventListeners() {
         const filters = getEl('category-filters');
         if (filters) {
@@ -700,6 +888,9 @@
 
         const loginForm = getEl('login-form');
         if (loginForm) loginForm.addEventListener('submit', handleLogin);
+
+        const forgotPassword = getEl('forgot-password-link');
+        if (forgotPassword) forgotPassword.addEventListener('click', handleResetPassword);
 
         const registerForm = getEl('register-form');
         if (registerForm) registerForm.addEventListener('submit', handleRegister);
@@ -734,20 +925,26 @@
             });
         }
 
-        // Cart Trigger - Check for delivery info first
+        // Cart Trigger - ตรวจสอบการล็อกอินก่อนเปิดตะกร้า
         const cartTrigger = getEl('cart-trigger');
         if (cartTrigger) {
             cartTrigger.addEventListener('click', () => {
-                const deliveryInfo = sessionStorage.getItem('deliveryInfo');
-                if (!deliveryInfo) {
-                    // Show delivery info modal first
-                    const deliveryModal = getEl('delivery-modal');
-                    if (deliveryModal) deliveryModal.classList.add('active');
-                } else {
-                    // Open cart directly
-                    const cartModal = getEl('cart-modal');
-                    if (cartModal) cartModal.classList.add('active');
+                // ตรวจสอบว่าผู้ใช้ล็อกอินแล้วหรือยัง
+                const user = sessionStorage.getItem('user');
+                if (!user) {
+                    // ยังไม่ได้ล็อกอิน - แสดง login modal
+                    const loginModal = getEl('login-modal');
+                    if (loginModal) {
+                        loginModal.classList.add('active');
+                        updateLoginStatus();
+                    }
+                    showToast("กรุณาเข้าสู่ระบบก่อนดูตะกร้าสินค้า", "error");
+                    return;
                 }
+
+                // ล็อกอินแล้ว - เปิดตะกร้าสินค้าได้เลย
+                const cartModal = getEl('cart-modal');
+                if (cartModal) cartModal.classList.add('active');
             });
         }
 
@@ -795,8 +992,8 @@
                 sessionStorage.setItem('deliveryInfo', JSON.stringify(deliveryInfo));
 
                 // Save to Firebase for the current user
-                if (userProfile && userProfile.username) {
-                    database.ref('users/' + userProfile.username + '/deliveryInfo').set(deliveryInfo)
+                if (userProfile && userProfile.uid) {
+                    database.ref('users/' + userProfile.uid + '/deliveryInfo').set(deliveryInfo)
                         .then(() => {
                             showToast("บันทึกข้อมูลจัดส่งเรียบร้อย!");
                             updateLoginStatus();
@@ -835,27 +1032,98 @@
         }
     }
 
-    // --- Payment & Admin Functions ---
+    // --- ฟังก์ชันชำระเงินและระบบ Admin ---
+
+    /**
+     * ฟังก์ชันเปิด modal ชำระเงิน
+     * - ตรวจสอบว่ามีสินค้าในตะกร้าหรือไม่
+     * - ตรวจสอบว่ากรอกข้อมูลจัดส่งแล้วหรือไม่
+     * - แสดง QR Code PromptPay สำหรับชำระเงิน
+     */
     window.openPayment = () => {
         if (cart.length === 0) return showToast("กรุณาเพิ่มสินค้าลงตะกร้าก่อนชำระเงิน", "error");
+
+        // ตรวจสอบข้อมูลจัดส่งก่อนชำระเงิน
+        const deliveryInfo = sessionStorage.getItem('deliveryInfo');
+        if (!deliveryInfo) {
+            // ยังไม่มีข้อมูลจัดส่ง - แสดง delivery modal
+            const deliveryModal = getEl('delivery-modal');
+            if (deliveryModal) deliveryModal.classList.add('active');
+            showToast("กรุณากรอกข้อมูลจัดส่งก่อนชำระเงิน", "error");
+            return;
+        }
+
         const modal = getEl('payment-modal');
         if (modal) modal.classList.add('active');
     };
 
+    /**
+     * ฟังก์ชันปิด modal ชำระเงิน
+     */
     window.closePayment = () => {
         const modal = getEl('payment-modal');
         if (modal) modal.classList.remove('active');
     };
 
+    /**
+     * ฟังก์ชันยืนยันการชำระเงิน
+     * - สร้างสรุปรายการสั่งซื้อและที่อยู่จัดส่ง
+     * - คัดลอกข้อความสรุปไปยัง Clipboard เพื่อให้ลูกค้าไปวางใน Facebook
+     * - เปิดหน้า Facebook ของร้านค้าเพื่อส่งหลักฐานการโอน
+     * - ล้างตะกร้าสินค้าหลังยืนยัน
+     */
     window.confirmPayment = () => {
-        window.open('https://www.facebook.com/siwakorn.bunde.2024', '_blank');
-        showToast("กำลังไปที่หน้า Facebook เพื่อส่งหลักฐานการโอน");
-        window.closePayment();
-        // Reset cart after payment confirmation
-        cart = [];
-        updateCartUI();
+        if (cart.length === 0) return showToast("ไม่มีสินค้าในตะกร้า", "error");
+
+        const deliveryInfo = JSON.parse(sessionStorage.getItem('deliveryInfo') || '{}');
+        const subtotal = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+        const shipping = 100;
+        const total = subtotal + shipping;
+
+        // สร้างข้อความสรุปรายการสั่งซื้อ
+        let orderSummary = `🛒 รายการสั่งซื้อจาก Siwabeetle Shop\n`;
+        orderSummary += `------------------------------\n`;
+        cart.forEach((item, index) => {
+            orderSummary += `${index + 1}. ${item.name} (${item.price}฿) x ${item.qty}\n`;
+        });
+        orderSummary += `------------------------------\n`;
+        orderSummary += `💰 ยอดรวมสินค้า: ${subtotal} บาท\n`;
+        orderSummary += `🚚 ค่าจัดส่ง: ${shipping} บาท\n`;
+        orderSummary += `✨ ยอดชำระทั้งหมด: ${total} บาท\n\n`;
+        orderSummary += `📍 ข้อมูลจัดส่ง:\n`;
+        orderSummary += `ชื่อ: ${deliveryInfo.name || '-'}\n`;
+        orderSummary += `เบอร์โทร: ${deliveryInfo.phone || '-'}\n`;
+        orderSummary += `ที่อยู่: ${deliveryInfo.address || '-'}\n`;
+        if (deliveryInfo.note) orderSummary += `หมายเหตุ: ${deliveryInfo.note}\n`;
+        orderSummary += `------------------------------\n`;
+        orderSummary += `✅(แจ้งชำระเงินเรียบร้อยแล้วครับ อย่าลืมแนบสลิปด้วยน้าา)`;
+
+        // คัดลอกไปยัง Clipboard
+        navigator.clipboard.writeText(orderSummary).then(() => {
+            showToast("คัดลอกรายละเอียดคำสั่งซื้อแล้ว! กรุณาวางข้อความในแชท Facebook", "success");
+
+            // รอให้ Toast แสดงซักครู่ก่อนเปิด Facebook
+            setTimeout(() => {
+                window.open('https://www.facebook.com/siwakorn.bunde.2024', '_blank');
+                window.closePayment();
+                // Reset cart after payment confirmation
+                cart = [];
+                updateCartUI();
+            }, 1500);
+        }).catch(err => {
+            console.error('ไม่สามารถคัดลอกข้อความได้:', err);
+            // Fallback: ถ้าคัดลอกไม่ได้ ก็เปิด Facebook เลย แต่อาจจะแจ้งเตือนผู้ใช้
+            window.open('https://www.facebook.com/siwakorn.bunde.2024', '_blank');
+            window.closePayment();
+            cart = [];
+            updateCartUI();
+        });
     };
 
+    /**
+     * ฟังก์ชันดาวน์โหลดรูป QR Code PromptPay
+     * - สร้างลิงก์ดาวน์โหลดชั่วคราวแล้วคลิกเพื่อดาวน์โหลด
+     */
     window.downloadQR = () => {
         const link = document.createElement('a');
         link.href = 'images/04e5eb92-d450-422e-b525-4149d8d04dd8.jpg';
@@ -866,6 +1134,11 @@
         showToast("บันทึกรูป QR Code แล้ว");
     };
 
+    /**
+     * ฟังก์ชันเปิด modal จัดการร้านค้า (สำหรับ Admin เท่านั้น)
+     * - ตรวจสอบว่าผู้ใช้เป็น 'siwakon' หรือไม่
+     * - แสดงรายการสินค้าทั้งหมดพร้อมช่องแก้ไข stock
+     */
     window.toggleAdminLogin = () => {
         if (userProfile && userProfile.username.toLowerCase() === 'siwakon') {
             const adminModal = getEl('admin-modal');
@@ -876,6 +1149,10 @@
         }
     };
 
+    /**
+     * ฟังก์ชันแสดงรายการสินค้าในหน้า Admin
+     * - สร้าง element สำหรับแต่ละสินค้าพร้อมช่อง input สำหรับแก้ไข stock
+     */
     function renderAdminProducts() {
         const container = getEl('admin-product-list');
         if (!container) return;
@@ -902,8 +1179,13 @@
         });
     }
 
+    /**
+     * ฟังก์ชันบันทึกข้อมูล stock สินค้า
+     * - รวบรวมค่า stock จากช่อง input ทั้งหมด
+     * - บันทึกข้อมูลลง Firebase
+     */
     window.saveStock = () => {
-        // Collect latest values from inputs
+        // รวบรวมค่าล่าสุดจาก input
         products.forEach((p) => {
             const input = getEl(`stock-input-${p.id}`);
             if (input) {
@@ -924,6 +1206,9 @@
         });
     };
 
+    /**
+     * ฟังก์ชันปิด modal จัดการร้านค้า
+     */
     window.closeAdminModal = () => {
         const modal = getEl('admin-modal');
         if (modal) modal.classList.remove('active');

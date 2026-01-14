@@ -105,10 +105,6 @@
                 <button class="btn-primary checkout-btn" onclick="openPayment()">
                     <i class="fa-solid fa-qrcode"></i> ชำระเงินด้วย PromptPay
                 </button>
-                <button class="filter-btn" id="copy-summary" style="width: 100%; margin-top: 10px;">
-                    <i class="fa-solid fa-copy"></i> คัดลอกรายการสินค้า
-                </button>
-
             </div>
         </div>
     </div>
@@ -124,15 +120,25 @@
             <!-- Login Form -->
             <form id="login-form">
                 <div class="form-group">
-                    <label for="login-username">Username <span class="required">*</span></label>
-                    <input type="text" id="login-username" required placeholder="ชื่อผู้ใช้งาน">
+                    <label for="login-email">Email <span class="required">*</span></label>
+                    <input type="email" id="login-email" required placeholder="example@email.com">
                 </div>
                 <div class="form-group">
                     <label for="login-password">Password <span class="required">*</span></label>
-                    <input type="password" id="login-password" required placeholder="••••••••">
+                    <div class="password-input-wrapper">
+                        <input type="password" id="login-password" required placeholder="••••••••">
+                        <button type="button" class="toggle-password"
+                            onclick="togglePasswordVisibility('login-password', this)">
+                            <i class="fa-solid fa-eye"></i>
+                        </button>
+                    </div>
                 </div>
                 <button type="submit" class="btn-primary" style="width: 100%; margin-top: 10px;">เข้าสู่ระบบ</button>
                 <p style="text-align: center; margin-top: 15px; font-size: 0.9rem;">
+                    <a href="#" id="forgot-password-link"
+                        style="color: var(--light-moss); text-decoration: none; opacity: 0.8;">ลืมรหัสผ่าน?</a>
+                </p>
+                <p style="text-align: center; margin-top: 10px; font-size: 0.9rem;">
                     ยังไม่มีบัญชี? <a href="#" id="go-to-register"
                         style="color: var(--light-moss); text-decoration: none; font-weight: 600;">สมัครสมาชิก</a>
                 </p>
@@ -145,8 +151,18 @@
                     <input type="text" id="reg-username" required placeholder="ตั้งชื่อผู้ใช้งาน">
                 </div>
                 <div class="form-group">
+                    <label for="reg-email">Email <span class="required">*</span></label>
+                    <input type="email" id="reg-email" required placeholder="example@email.com">
+                </div>
+                <div class="form-group">
                     <label for="reg-password">Password <span class="required">*</span></label>
-                    <input type="password" id="reg-password" required placeholder="••••••••">
+                    <div class="password-input-wrapper">
+                        <input type="password" id="reg-password" required placeholder="••••••••">
+                        <button type="button" class="toggle-password"
+                            onclick="togglePasswordVisibility('reg-password', this)">
+                            <i class="fa-solid fa-eye"></i>
+                        </button>
+                    </div>
                 </div>
                 <button type="submit" class="btn-primary" style="width: 100%; margin-top: 10px;">สมัครสมาชิก</button>
                 <p style="text-align: center; margin-top: 15px; font-size: 0.9rem;">
@@ -154,85 +170,102 @@
                         style="color: var(--light-moss); text-decoration: none; font-weight: 600;">เข้าสู่ระบบ</a>
                 </p>
             </form>
-
             <!-- Profile View (Hidden by default) -->
-            <div id="profile-view" style="display: none; text-align: center; padding: 10px 0;">
-                <div class="profile-avatar-container"
-                    style="position: relative; width: 120px; height: 120px; margin: 0 auto 15px;">
-                    <div class="profile-avatar"
-                        style="width: 100%; height: 100%; border: 3px solid var(--light-moss); box-shadow: 0 0 20px rgba(163, 177, 138, 0.4);">
-                        <img id="profile-avatar-img" src="images/beetle_avatar.png" alt="Beetle Avatar"
-                            style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
+            <div id="profile-view" style="display: none;" class="profile-card-premium">
+                <div class="profile-cover"></div>
+
+                <div class="profile-content-body">
+                    <div class="profile-avatar-premium-wrapper">
+                        <div class="profile-avatar-inner">
+                            <img id="profile-avatar-img" src="images/beetle_avatar.png" alt="Beetle Avatar">
+                        </div>
+                        <button class="change-avatar-floating" onclick="toggleAvatarSelection()" title="เปลี่ยนอวตาร์">
+                            <i class="fa-solid fa-camera"></i>
+                        </button>
                     </div>
-                    <button class="change-avatar-btn" onclick="toggleAvatarSelection()"
-                        style="position: absolute; bottom: 0; right: 0; background: var(--moss-green); color: white; border: none; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.3);">
-                        <i class="fa-solid fa-camera"></i>
-                    </button>
-                </div>
 
-                <div id="avatar-selection"
-                    style="display: none; margin-bottom: 20px; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);">
-                    <p style="font-size: 0.8rem; margin-bottom: 10px; color: var(--light-moss);">เลือกอวตาร์ของคุณ</p>
-                    <div class="avatar-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
-                        <img src="images/beetle_avatar.png" class="avatar-option"
-                            onclick="selectAvatar('images/beetle_avatar.png')"
-                            style="width: 100%; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: 0.3s;">
-                        <img src="images/beetle_avatar_1.png" class="avatar-option"
-                            onclick="selectAvatar('images/beetle_avatar_1.png')"
-                            style="width: 100%; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: 0.3s;">
-                        <img src="images/beetle_avatar_2.png" class="avatar-option"
-                            onclick="selectAvatar('images/beetle_avatar_2.png')"
-                            style="width: 100%; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: 0.3s;">
-                        <img src="images/beetle_avatar_3.png" class="avatar-option"
-                            onclick="selectAvatar('images/beetle_avatar_3.png')"
-                            style="width: 100%; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: 0.3s;">
-                        <img src="images/beetle_avatar_4.png" class="avatar-option"
-                            onclick="selectAvatar('images/beetle_avatar_4.png')"
-                            style="width: 100%; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: 0.3s;">
-                        <img src="images/beetle_avatar_5.png" class="avatar-option"
-                            onclick="selectAvatar('images/beetle_avatar_5.png')"
-                            style="width: 100%; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: 0.3s;">
+                    <div id="avatar-selection" class="avatar-selection-panel"
+                        style="display: none; margin-bottom: 25px; background: rgba(0,0,0,0.3); padding: 20px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1); box-shadow: inset 0 0 20px rgba(0,0,0,0.5);">
+                        <p
+                            style="font-size: 0.85rem; margin-bottom: 15px; color: var(--light-moss); font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">
+                            เลือกตัวตนของคุณ</p>
+                        <div class="avatar-grid"
+                            style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+                            <img src="images/beetle_avatar.png" class="avatar-option"
+                                onclick="selectAvatar('images/beetle_avatar.png')">
+                            <img src="images/beetle_avatar_1.png" class="avatar-option"
+                                onclick="selectAvatar('images/beetle_avatar_1.png')">
+                            <img src="images/beetle_avatar_2.png" class="avatar-option"
+                                onclick="selectAvatar('images/beetle_avatar_2.png')">
+                            <img src="images/beetle_avatar_3.png" class="avatar-option"
+                                onclick="selectAvatar('images/beetle_avatar_3.png')">
+                            <img src="images/beetle_avatar_4.png" class="avatar-option"
+                                onclick="selectAvatar('images/beetle_avatar_4.png')">
+                            <img src="images/beetle_avatar_5.png" class="avatar-option"
+                                onclick="selectAvatar('images/beetle_avatar_5.png')">
+                        </div>
+                    </div>
+
+                    <div class="profile-username-container" style="justify-content: center; margin-bottom: 5px;">
+                        <h3 id="profile-username-display"
+                            style="font-size: 1.8rem; font-weight: 900; color: var(--white); text-shadow: 0 4px 10px rgba(0,0,0,0.5);">
+                        </h3>
+                        <button class="edit-name-btn" onclick="toggleEditUsername()"
+                            style="margin-left: 10px; background: rgba(255,255,255,0.1);">
+                            <i class="fa-solid fa-pen-nib"></i>
+                        </button>
+                    </div>
+                    <p id="profile-email-display"
+                        style="color: var(--light-moss); font-size: 0.9rem; opacity: 0.8; margin-bottom: 25px;"></p>
+
+                    <div id="edit-username-group" class="edit-name-input-group"
+                        style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 16px; border: 1px solid var(--glass-border);">
+                        <div class="form-group" style="margin-bottom: 15px;">
+                            <label style="font-size: 0.85rem; opacity: 0.7;">ชื่อผู้ใช้งานใหม่</label>
+                            <input type="text" id="new-username-input" placeholder="กรอกชื่อใหม่"
+                                style="width: 100%; background: rgba(0,0,0,0.3);">
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn-primary" onclick="updateUsername()"
+                                style="flex: 2; height: 45px; font-size: 0.9rem;">ยืนยันการเปลี่ยน</button>
+                            <button class="btn-primary" onclick="toggleEditUsername()"
+                                style="flex: 1; height: 45px; font-size: 0.9rem; background: rgba(255,255,255,0.1); border: 1px solid var(--glass-border);">ยกเลิก</button>
+                        </div>
+                    </div>
+
+                    <div class="profile-info-grid">
+                        <div class="info-card-premium">
+                            <div class="info-card-header">
+                                <i class="fa-solid fa-truck-fast"></i> ข้อมูลการจัดส่ง
+                            </div>
+                            <div class="info-card-content" id="delivery-info-content">
+                                <p style="opacity: 0.6; font-style: italic;">ยังไม่ได้ระบุที่อยู่สำหรับจัดส่ง</p>
+                            </div>
+                            <button class="btn-premium-action btn-edit-premium" style="width: 100%; margin-top: 15px;"
+                                onclick="window.openDeliveryForm()">
+                                <i class="fa-solid fa-map-location-dot"></i> แก้ไขข้อมูลที่อยู่
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="profile-action-btns">
+                        <button id="admin-access-btn" class="btn-premium-action"
+                            style="display: none; background: var(--grad-gold); color: var(--deep-forest); border: none;"
+                            onclick="window.toggleAdminLogin()">
+                            <i class="fa-solid fa-crown"></i> แผงควบคุมร้านค้า
+                        </button>
+
+                        <button class="btn-premium-action btn-logout-premium" onclick="window.handleLogout()">
+                            <i class="fa-solid fa-power-off"></i> ออกจากระบบ
+                        </button>
+
+                        <button
+                            style="background: transparent; border: none; color: rgba(255,100,100,0.4); font-size: 0.75rem; text-decoration: underline; cursor: pointer; margin-top: 10px;"
+                            onclick="window.handleDeleteAccount()">
+                            ลบบัญชีผู้ใช้ถาวร
+                        </button>
                     </div>
                 </div>
-
-                <div id="profile-username-display"
-                    style="font-size: 1.4rem; font-weight: 800; color: var(--light-moss); margin-bottom: 20px; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">
-                </div>
-
-                <!-- Delivery Info Display -->
-                <div id="delivery-info-display"
-                    style="text-align: left; background: rgba(255,255,255,0.05); padding: 15px; border-radius: 12px; margin-bottom: 20px; font-size: 0.9rem; border: 1px solid rgba(255,255,255,0.1);">
-                    <h4
-                        style="margin-bottom: 10px; color: var(--dappled-gold); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px;">
-                        <i class="fa-solid fa-truck"></i> ข้อมูลจัดส่ง
-                    </h4>
-                    <div id="delivery-info-content">
-                        <p style="opacity: 0.7;">ไม่มีข้อมูลจัดส่ง</p>
-                    </div>
-                    <button class="filter-btn" style="width: 100%; margin-top: 10px; font-size: 0.8rem; padding: 5px;"
-                        onclick="window.openDeliveryForm()">
-                        <i class="fa-solid fa-pen-to-square"></i> แก้ไขข้อมูลจัดส่ง
-                    </button>
-                </div>
-
-                <!-- Restricted Admin Access Button -->
-                <button id="admin-access-btn" class="btn-primary"
-                    style="display: none; margin-bottom: 10px; background: var(--dappled-gold); border: none; width: 100%;"
-                    onclick="window.toggleAdminLogin()">
-                    <i class="fa-solid fa-gears"></i> จัดการร้านค้า
-                </button>
-
-                <button class="btn-primary"
-                    style="background: rgba(255,100,100,0.2); border: 1px solid rgba(255,100,100,0.3); width: 100%; margin-bottom: 10px;"
-                    onclick="window.handleLogout()">
-                    <i class="fa-solid fa-right-from-bracket"></i> ออกจากระบบ
-                </button>
-
-                <button class="btn-primary"
-                    style="background: transparent; border: 1px solid rgba(255,100,100,0.5); color: #ffadad; width: 100%; font-size: 0.8rem; padding: 8px;"
-                    onclick="window.handleDeleteAccount()">
-                    <i class="fa-solid fa-user-slash"></i> ลบบัญชีผู้ใช้งาน
-                </button>
             </div>
         </div>
     </div>
@@ -259,8 +292,8 @@
                         placeholder="บ้านเลขที่ ถนน แขวง/ตำบล เขต/อำเภอ จังหวัด รหัสไปรษณีย์"></textarea>
                 </div>
                 <div class="form-group">
-                    <label for="delivery-note">รายละเอียดเพิ่มเติม (ถ้ามี)</label>
-                    <textarea id="delivery-note" placeholder="เช่น "></textarea>
+                    <label for="delivery-note">รายละเอียดเพิ่มเติม (ถ้ามี) </label>
+                    <textarea id="delivery-note" placeholder="เช่น ต้องการส่งสอบถาม หรือ แจ้งปัญหา"></textarea>
                 </div>
                 <button type="submit" class="btn-primary" style="width: 100%; margin-top: 10px;">
                     <i class="fa-solid fa-check"></i> บันทึกข้อมูล
