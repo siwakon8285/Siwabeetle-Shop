@@ -73,13 +73,24 @@ body {
     color: var(--soft-cream);
     line-height: 1.6;
     overflow-x: hidden;
-    /* Fixed Background with Overlay */
+    position: relative;
+    min-height: 100vh;
+}
+
+/* Fixed Background with Overlay - using pseudo-element for iOS compatibility */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     background: linear-gradient(rgba(4, 18, 9, 0.7), rgba(4, 18, 9, 0.85)),
         url('images/main-bg.jpg');
     background-size: cover;
     background-position: center;
-    background-attachment: fixed;
     background-repeat: no-repeat;
+    z-index: -1;
 }
 
 /* Typography Overrides */
@@ -118,13 +129,6 @@ h3,
 @media (max-width: 768px) {
     .container {
         padding: 0 20px;
-    }
-
-    /* Fix for mobile background - iOS doesn't support background-attachment: fixed */
-    body {
-        background-attachment: scroll;
-        background-size: cover;
-        background-position: center top;
     }
 }
 
