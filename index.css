@@ -119,6 +119,13 @@ h3,
     .container {
         padding: 0 20px;
     }
+
+    /* Fix for mobile background - iOS doesn't support background-attachment: fixed */
+    body {
+        background-attachment: scroll;
+        background-size: cover;
+        background-position: center top;
+    }
 }
 
 /* Header & Navigation */

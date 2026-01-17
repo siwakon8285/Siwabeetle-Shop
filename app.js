@@ -66,6 +66,15 @@
         },
         {
             id: 8,
+            name: "ตัวอ่อนด้วงสามเขาแอสลาส (ระยะที่ 2)",
+            category: "larva",
+            price: 500,
+            image: "images/7d65814b-46c0-4355-9d6b-d1fed1e7dd44.jpg",
+            stock: 0,
+            description: "ตัวอ่อนด้วงสามเขา ระยะที่ 2 พร้อมเข้าดักแด้"
+        },
+        {
+            id: 9,
             name: "ตัวอ่อนด้วงสามเขาแอสลาส (ระยะที่ 1)",
             category: "larva",
             price: 250,
@@ -74,7 +83,7 @@
             description: "ตัวอ่อนด้วงสามเขา ระยะที่ 1 พร้อมเข้าดักแด้"
         },
         {
-            id: 9,
+            id: 10,
             name: "คู่ด้วงเฮอร์คิวลิส (เพศผู้ 1 ตัว เพศเมีย 1 ตัว)",
             category: "set",
             price: 2000,
@@ -83,7 +92,7 @@
             description: "คู่ด้วงเฮอร์คิวลิส (เพศผู้ 1 ตัว เพศเมีย 1 ตัว)"
         },
         {
-            id: 10,
+            id: 11,
             name: "คู่ด้วงสามเขาคอคาซัส (เพศผู้ 1 ตัว เพศเมีย 1 ตัว)",
             category: "set",
             price: 1500,
@@ -92,7 +101,7 @@
             description: "คู่ด้วงสามเขาคอคาซัส (เพศผู้ 1 ตัว เพศเมีย 1 ตัว)"
         },
         {
-            id: 11,
+            id: 12,
             name: "คู่ด้วงคีมฟันเลือย (เพศผู้ 1 ตัว เพศเมีย 1 ตัว)",
             category: "set",
             price: 800,
@@ -101,7 +110,7 @@
             description: "คู่ด้วงคีมฟันเลือย (เพศผู้ 1 ตัว เพศเมีย 1 ตัว)"
         },
         {
-            id: 12,
+            id: 13,
             name: "กล่องเลี้ยงด้วง",
             category: "accessory",
             price: 280,
@@ -110,7 +119,7 @@
             description: "กล่องเลี้ยงด้วง พร้อมตู้ดิน และอาหาร"
         },
         {
-            id: 13,
+            id: 14,
             name: "แมทหมักคุณภาพสูงสำหรับด้วงกว่าง",
             category: "accessory",
             price: 180,
@@ -119,7 +128,7 @@
             description: "แมทหมักคุณภาพสูงสำหรับด้วง"
         },
         {
-            id: 14,
+            id: 15,
             name: "แมทหมักคุณภาพสูงสำหรับด้วงกว่างขนาดเล็ก",
             category: "accessory",
             price: 180,
@@ -128,7 +137,7 @@
             description: "แมทหมักคุณภาพสูงสำหรับด้วง"
         },
         {
-            id: 15,
+            id: 16,
             name: "แมทหมักคุณภาพสูงสำหรับด้วงคีม",
             category: "accessory",
             price: 180,
@@ -137,7 +146,7 @@
             description: "แมทหมักคุณภาพสูงสำหรับด้วง"
         },
         {
-            id: 16,
+            id: 17,
             name: "แมทหมักคุณภาพสูงสำหรับตัวอ่อนด้วงคีม",
             category: "accessory",
             price: 180,
@@ -871,6 +880,7 @@
 
             const card = document.createElement('div');
             card.className = 'product-card glass';
+            card.setAttribute('data-product-id', p.id);
             card.innerHTML = `
                 <div class="product-image">
                     ${isOutOfStock ? '<div class="out-of-stock-badge">หมดชั่วคราว</div>' : ''}
@@ -892,11 +902,7 @@
                         <button class="add-to-cart-btn" onclick="window.addToCart(${p.id})">
                             <i class="fa-solid fa-cart-plus"></i>
                         </button>
-                        ` : `
-                        <button class="notify-stock-btn" onclick="window.openNotifyModal(${p.id})">
-                            <i class="fa-solid fa-bell"></i> แจ้งเตือน
-                        </button>
-                        `}
+                        ` : ''}
                     </div>
                 </div>
             `;
@@ -1958,13 +1964,32 @@
     window.scrollToProduct = (id) => {
         const searchWrapper = getEl('search-wrapper');
         const searchToggle = getEl('search-toggle');
+        const searchInput = getEl('search-input');
         searchWrapper.classList.remove('active');
         searchToggle.classList.remove('active');
         getEl('search-results').classList.remove('active');
+        if (searchInput) searchInput.value = '';
 
-        // Filter to show all and scroll to shop section
+        // Filter to show all products first
         renderProducts('all');
-        document.querySelector('#shop').scrollIntoView({ behavior: 'smooth' });
+
+        // Wait for render then scroll to the specific product
+        setTimeout(() => {
+            const productCard = document.querySelector(`[data-product-id="${id}"]`);
+            if (productCard) {
+                productCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // Highlight effect
+                productCard.style.transition = 'box-shadow 0.3s ease, transform 0.3s ease';
+                productCard.style.boxShadow = '0 0 25px rgba(212, 175, 55, 0.6)';
+                productCard.style.transform = 'scale(1.02)';
+                setTimeout(() => {
+                    productCard.style.boxShadow = '';
+                    productCard.style.transform = '';
+                }, 2000);
+            } else {
+                document.querySelector('#shop').scrollIntoView({ behavior: 'smooth' });
+            }
+        }, 100);
     };
 
     // ==========================================
