@@ -20,6 +20,10 @@
                     ".indexOn": [
                         "createdAt"
                     ]
+                },
+                "wishlist": {
+                    ".read": "auth != null && auth.uid == $uid",
+                    ".write": "auth != null && auth.uid == $uid"
                 }
             }
         },
@@ -31,9 +35,14 @@
             ],
             "$orderId": {
                 ".read": "auth != null && (data.child('userId').val() == auth.uid || root.child('admins').child(auth.uid).exists())",
-                ".write": "auth != null && (!data.exists() || data.child('userId').val() == auth.uid)",
+                ".write": "auth != null && (!data.exists() || data.child('userId').val() == auth.uid || root.child('admins').child(auth.uid).exists())",
                 ".validate": "newData.hasChildren(['orderId', 'userId', 'items', 'total', 'createdAt'])"
             }
+        },
+        "stockNotifications": {
+            ".read": "auth != null && root.child('admins').child(auth.uid).exists()",
+            ".write": true,
+            ".validate": "newData.hasChildren(['productId', 'email', 'createdAt'])"
         },
         "admins": {
             ".read": "auth != null",

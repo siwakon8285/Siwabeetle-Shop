@@ -32,6 +32,19 @@
                 <span>SIWABEETLES</span>
             </a>
             <div class="nav-actions">
+                <!-- Search Bar -->
+                <div class="search-wrapper" id="search-wrapper">
+                    <input type="text" id="search-input" placeholder="ค้นหาสินค้า..." />
+                    <div class="search-results" id="search-results"></div>
+                </div>
+                <button class="nav-btn search-toggle-btn" id="search-toggle" title="ค้นหา">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                </button>
+                <!-- Wishlist Button -->
+                <button class="nav-btn wishlist-btn" id="wishlist-trigger" title="รายการโปรด">
+                    <i class="fa-solid fa-heart"></i>
+                    <span class="wishlist-badge" id="wishlist-count">0</span>
+                </button>
                 <button class="nav-btn" id="login-trigger" title="ข้อมูลผู้ส่ง">
                     <i class="fa-solid fa-user"></i>
                 </button>
@@ -383,6 +396,56 @@
                 ยืนยันการชำระเงินที่ Facebook
             </button>
 
+        </div>
+    </div>
+
+    <!-- Wishlist Modal -->
+    <div class="modal" id="wishlist-modal">
+        <div class="cart-sidebar wishlist-sidebar">
+            <div class="cart-header">
+                <h2><i class="fa-solid fa-heart" style="color: #ff6b6b;"></i> รายการโปรด</h2>
+                <button class="close-cart" id="close-wishlist">&times;</button>
+            </div>
+            <div class="cart-items" id="wishlist-items-container">
+                <!-- Wishlist items will be injected here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Stock Notification Modal -->
+    <div class="modal" id="notify-modal">
+        <div class="glass registration-form" style="max-width: 420px;">
+            <div class="cart-header">
+                <h2><i class="fa-solid fa-bell" style="color: var(--dappled-gold);"></i> แจ้งเตือนสินค้า</h2>
+                <button class="close-cart" id="close-notify">&times;</button>
+            </div>
+            <div style="padding: 25px;">
+                <p id="notify-product-name"
+                    style="font-weight: 700; font-size: 1.1rem; margin-bottom: 20px; color: var(--white);"></p>
+                <p style="color: var(--light-moss); margin-bottom: 20px; font-size: 0.9rem;">
+                    เราจะส่งอีเมลแจ้งเตือนเมื่อสินค้านี้กลับมาพร้อมจำหน่าย</p>
+                <div class="form-group">
+                    <label for="notify-email">อีเมลของคุณ <span class="required">*</span></label>
+                    <input type="email" id="notify-email" placeholder="example@email.com" />
+                </div>
+                <button class="btn-primary" onclick="window.submitStockNotification()"
+                    style="width: 100%; margin-top: 20px;">
+                    <i class="fa-solid fa-bell"></i> ตั้งค่าแจ้งเตือน
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Order Detail Modal -->
+    <div class="modal" id="order-detail-modal">
+        <div class="glass registration-form" style="max-width: 550px;">
+            <div class="cart-header">
+                <h2><i class="fa-solid fa-receipt" style="color: var(--light-moss);"></i> รายละเอียดคำสั่งซื้อ</h2>
+                <button class="close-cart" id="close-order-detail">&times;</button>
+            </div>
+            <div id="order-detail-content">
+                <!-- Order details will be injected here -->
+            </div>
         </div>
     </div>
 

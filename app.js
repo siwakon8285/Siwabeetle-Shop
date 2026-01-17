@@ -432,6 +432,8 @@
     let userProfile = null;
     let products = [...defaultProducts];
     let pendingItemId = null;
+    let wishlist = [];
+    let notifyProductId = null;
 
     /**
      * ฟังก์ชันลัดสำหรับดึง element ด้วย ID
@@ -484,6 +486,7 @@
 
                 renderProducts('all');
                 renderCart();
+                renderShowcaseSections();
             }, (error) => {
                 console.error("Firebase Sync Error:", error);
                 renderProducts('all'); // Stay with local defaults
@@ -495,6 +498,8 @@
 
         updateCartUI();
         setupEventListeners();
+        initSearch();
+        loadWishlist();
 
         // Listen for Authentication state changes
         auth.onAuthStateChanged(async (user) => {
@@ -517,6 +522,9 @@
                     }
 
                     sessionStorage.setItem('user', JSON.stringify(userProfile));
+
+                    // Reload wishlist from Firebase after login
+                    loadWishlist();
                 } catch (err) {
                     console.error("Error fetching user profile:", err);
                 }
@@ -525,6 +533,9 @@
                 userProfile = null;
                 sessionStorage.removeItem('user');
                 sessionStorage.removeItem('deliveryInfo');
+
+                // Reload wishlist from localStorage after logout
+                loadWishlist();
             }
             updateLoginStatus();
         });
@@ -737,14 +748,14 @@
                 });
 
                 return `
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; margin-bottom: 8px; border-radius: 12px; background: rgba(255,255,255,0.03); cursor: pointer; transition: all 0.3s ease; border: 1px solid rgba(255,255,255,0.05);" onclick="window.viewOrderDetail('${sanitizeHTML(order.orderId)}')" onmouseover="this.style.borderColor='var(--light-moss)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.05)'">
                         <div>
                             <div style="font-size: 0.8rem; font-weight: 600; color: var(--dappled-gold);">${sanitizeHTML(order.orderId)}</div>
                             <div style="font-size: 0.7rem; color: var(--light-moss); opacity: 0.7;">${orderDate} | ${order.itemCount || 0} ชิ้น</div>
                         </div>
                         <div style="text-align: right;">
                             <div style="font-size: 0.85rem; font-weight: 700; color: white;">${order.total?.toLocaleString('th-TH') || 0} ฿</div>
-                            <div style="font-size: 0.65rem; color: ${status.color};">${status.text}</div>
+                            <div style="font-size: 0.65rem; color: ${status.color}; display: flex; align-items: center; justify-content: flex-end; gap: 5px;"><i class="fa-solid fa-circle" style="font-size: 0.4rem;"></i>${status.text}</div>
                         </div>
                     </div>
                 `;
@@ -847,11 +858,26 @@
         filtered.forEach(p => {
             if (!p || typeof p !== 'object') return;
             const isOutOfStock = p.stock <= 0;
+            const inWishlist = isInWishlist(p.id);
+            const isFeatured = p.isFeatured || false;
+            const isBestSeller = p.isBestSeller || false;
+            const isNew = p.isNew || false;
+
+            // Build status badges HTML - text labels like out-of-stock badge
+            let statusBadges = '';
+            if (isFeatured) statusBadges += '<div class="product-text-badge badge-featured">⭐ แนะนำ</div>';
+            if (isBestSeller) statusBadges += '<div class="product-text-badge badge-bestseller">🔥 ขายดี</div>';
+            if (isNew) statusBadges += '<div class="product-text-badge badge-new">✨ ใหม่</div>';
+
             const card = document.createElement('div');
             card.className = 'product-card glass';
             card.innerHTML = `
                 <div class="product-image">
                     ${isOutOfStock ? '<div class="out-of-stock-badge">หมดชั่วคราว</div>' : ''}
+                    ${statusBadges ? `<div class="product-badges-stack">${statusBadges}</div>` : ''}
+                    <button class="wishlist-heart-btn ${inWishlist ? 'active' : ''}" onclick="window.toggleWishlist(${p.id})">
+                        <i class="fa-${inWishlist ? 'solid' : 'regular'} fa-heart"></i>
+                    </button>
                     <img src="${p.image}" alt="${p.name}" class="${isOutOfStock ? 'grayscale' : ''}" onerror="this.src='https://placehold.co/400x400?text=No+Image'">
                 </div>
                 <div class="product-info">
@@ -861,12 +887,16 @@
                         คงเหลือ: ${p.stock || 0} ชิ้น
                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: flex-end;">
-                        <span class="product-price">${p.price || 0} ฿</span>
+                        <span class="product-price">${(p.price || 0).toLocaleString()} ฿</span>
                         ${!isOutOfStock ? `
                         <button class="add-to-cart-btn" onclick="window.addToCart(${p.id})">
                             <i class="fa-solid fa-cart-plus"></i>
                         </button>
-                        ` : ''}
+                        ` : `
+                        <button class="notify-stock-btn" onclick="window.openNotifyModal(${p.id})">
+                            <i class="fa-solid fa-bell"></i> แจ้งเตือน
+                        </button>
+                        `}
                     </div>
                 </div>
             `;
@@ -1643,18 +1673,49 @@
      * Render stock management tab
      */
     function renderStockTab(container) {
-        let stockHTML = '';
+        let stockHTML = `
+            <div style="margin-bottom: 20px; padding: 15px; background: rgba(255,183,3,0.1); border-radius: 12px; border: 1px solid rgba(255,183,3,0.2);">
+                <div style="display: flex; align-items: center; gap: 10px; color: var(--dappled-gold);">
+                    <i class="fa-solid fa-info-circle"></i>
+                    <span style="font-size: 0.85rem;">คลิกที่ป้ายเพื่อเปิด/ปิดสถานะ: <span style="color: #ffd700;">⭐ แนะนำ</span> | <span style="color: #ff6b6b;">🔥 ขายดี</span> | <span style="color: #74c69d;">✨ ใหม่</span></span>
+                </div>
+            </div>
+        `;
 
         products.forEach(p => {
             if (!p || !p.name || p.name === 'สินค้าไม่ได้ระบุชื่อ') return;
+            const isFeatured = p.isFeatured || false;
+            const isBestSeller = p.isBestSeller || false;
+            const isNew = p.isNew || false;
+
             stockHTML += `
                 <div class="admin-product-item" style="display: flex; align-items: center; gap: 15px; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 10px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.05);">
                     <img src="${p.image}" style="width: 50px; height: 50px; border-radius: 8px; object-fit: cover;" onerror="this.src='https://placehold.co/50x50?text=No+Image'">
                     <div style="flex: 1;">
                         <div style="font-size: 0.9rem; font-weight: 600; color: white;">${sanitizeHTML(p.name)}</div>
                         <div style="font-size: 0.75rem; color: var(--light-moss); opacity: 0.7;">ID: ${p.id} | ${p.price} ฿</div>
+                        <div style="display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap;">
+                            <button onclick="window.toggleProductStatus(${p.id}, 'isFeatured')" 
+                                style="padding: 4px 8px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.65rem; font-weight: 700; transition: all 0.3s;
+                                background: ${isFeatured ? 'linear-gradient(135deg, #ffd700, #ffb703)' : 'rgba(255,255,255,0.1)'}; 
+                                color: ${isFeatured ? '#000' : 'rgba(255,255,255,0.5)'};">
+                                ⭐ แนะนำ
+                            </button>
+                            <button onclick="window.toggleProductStatus(${p.id}, 'isBestSeller')" 
+                                style="padding: 4px 8px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.65rem; font-weight: 700; transition: all 0.3s;
+                                background: ${isBestSeller ? 'linear-gradient(135deg, #ff6b6b, #ee5a5a)' : 'rgba(255,255,255,0.1)'}; 
+                                color: ${isBestSeller ? '#fff' : 'rgba(255,255,255,0.5)'};">
+                                🔥 ขายดี
+                            </button>
+                            <button onclick="window.toggleProductStatus(${p.id}, 'isNew')" 
+                                style="padding: 4px 8px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.65rem; font-weight: 700; transition: all 0.3s;
+                                background: ${isNew ? 'linear-gradient(135deg, #74c69d, #40916c)' : 'rgba(255,255,255,0.1)'}; 
+                                color: ${isNew ? '#fff' : 'rgba(255,255,255,0.5)'};">
+                                ✨ ใหม่
+                            </button>
+                        </div>
                     </div>
-                    <div style="width: 90px;">
+                    <div style="width: 80px;">
                         <label style="font-size: 0.7rem; display: block; margin-bottom: 5px; color: var(--light-moss);">สต็อก</label>
                         <input type="number" value="${p.stock}" id="stock-input-${p.id}" min="0"
                             style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: white; border-radius: 6px; padding: 8px; text-align: center; font-weight: 600;">
@@ -1665,6 +1726,44 @@
 
         container.innerHTML = stockHTML || '<p style="text-align: center; color: var(--light-moss);">ไม่พบสินค้า</p>';
     }
+
+    /**
+     * Toggle product status (Featured/New/BestSeller)
+     */
+    window.toggleProductStatus = async (productId, statusKey) => {
+        const productIndex = products.findIndex(p => p && p.id === productId);
+        if (productIndex === -1) return;
+
+        const product = products[productIndex];
+        const newValue = !product[statusKey];
+
+        // Immediately update local state for instant UI feedback
+        products[productIndex][statusKey] = newValue;
+
+        // Re-render stock tab immediately for instant color change
+        const contentContainer = getEl('admin-tab-content');
+        if (contentContainer && currentAdminTab === 'stock') {
+            renderStockTab(contentContainer);
+        }
+
+        const statusMessages = {
+            'isFeatured': 'ตั้งเป็นสินค้าแนะนำแล้ว ⭐',
+            'isBestSeller': 'ตั้งเป็นสินค้าขายดีแล้ว 🔥',
+            'isNew': 'ตั้งเป็นสินค้าใหม่แล้ว ✨'
+        };
+
+        showToast(newValue ? statusMessages[statusKey] : 'ยกเลิกสถานะแล้ว');
+
+        try {
+            await database.ref(`products/${productIndex}/${statusKey}`).set(newValue);
+        } catch (err) {
+            console.error('Error toggling product status:', err);
+            // Revert on error
+            products[productIndex][statusKey] = !newValue;
+            if (contentContainer && currentAdminTab === 'stock') renderStockTab(contentContainer);
+            showToast('เกิดข้อผิดพลาด', 'error');
+        }
+    };
 
     /**
      * Render orders management tab
@@ -1785,6 +1884,476 @@
         if (modal) modal.classList.remove('active');
         currentAdminTab = 'analytics'; // Reset to default tab
     };
+
+    // ==========================================
+    // SEARCH SYSTEM
+    // ==========================================
+
+    /**
+     * Initialize search functionality
+     */
+    function initSearch() {
+        const searchToggle = getEl('search-toggle');
+        const searchWrapper = getEl('search-wrapper');
+        const searchInput = getEl('search-input');
+        const searchResults = getEl('search-results');
+
+        if (!searchToggle || !searchWrapper) return;
+
+        // Toggle search bar
+        searchToggle.addEventListener('click', () => {
+            searchWrapper.classList.toggle('active');
+            searchToggle.classList.toggle('active');
+            if (searchWrapper.classList.contains('active')) {
+                searchInput.focus();
+            } else {
+                searchInput.value = '';
+                searchResults.classList.remove('active');
+            }
+        });
+
+        // Real-time search
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase().trim();
+            if (query.length < 2) {
+                searchResults.classList.remove('active');
+                return;
+            }
+
+            const results = products.filter(p =>
+                p && p.name && p.name.toLowerCase().includes(query)
+            ).slice(0, 6);
+
+            if (results.length === 0) {
+                searchResults.innerHTML = `
+                    <div class="search-no-results">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <p>ไม่พบสินค้าที่ค้นหา</p>
+                    </div>
+                `;
+            } else {
+                searchResults.innerHTML = results.map(p => `
+                    <div class="search-result-item" onclick="window.scrollToProduct(${p.id})">
+                        <img src="${p.image}" alt="${sanitizeHTML(p.name)}" onerror="this.src='https://placehold.co/50x50?text=...'">
+                        <div class="search-result-info">
+                            <h4>${sanitizeHTML(p.name)}</h4>
+                            <span>${p.price.toLocaleString()} ฿</span>
+                        </div>
+                    </div>
+                `).join('');
+            }
+            searchResults.classList.add('active');
+        });
+
+        // Close on click outside
+        document.addEventListener('click', (e) => {
+            if (!searchWrapper.contains(e.target) && !searchToggle.contains(e.target)) {
+                searchWrapper.classList.remove('active');
+                searchToggle.classList.remove('active');
+                searchResults.classList.remove('active');
+            }
+        });
+    }
+
+    window.scrollToProduct = (id) => {
+        const searchWrapper = getEl('search-wrapper');
+        const searchToggle = getEl('search-toggle');
+        searchWrapper.classList.remove('active');
+        searchToggle.classList.remove('active');
+        getEl('search-results').classList.remove('active');
+
+        // Filter to show all and scroll to shop section
+        renderProducts('all');
+        document.querySelector('#shop').scrollIntoView({ behavior: 'smooth' });
+    };
+
+    // ==========================================
+    // WISHLIST SYSTEM
+    // ==========================================
+
+    /**
+     * Load wishlist from Firebase or localStorage
+     */
+    function loadWishlist() {
+        // Clear old localStorage wishlist (now requires login)
+        localStorage.removeItem('wishlist');
+
+        // Only load wishlist if user is logged in
+        if (userProfile?.uid) {
+            database.ref('users/' + userProfile.uid + '/wishlist').on('value', (snapshot) => {
+                const data = snapshot.val();
+                wishlist = data ? Object.values(data) : [];
+                updateWishlistUI();
+                renderProducts(document.querySelector('.filter-btn.active')?.dataset.category || 'all');
+                renderShowcaseSections();
+            });
+        } else {
+            // Not logged in - clear wishlist
+            wishlist = [];
+            updateWishlistUI();
+        }
+    }
+
+    /**
+     * Update wishlist UI (badge count and items)
+     */
+    function updateWishlistUI() {
+        const badge = getEl('wishlist-count');
+        if (badge) badge.textContent = wishlist.length;
+        renderWishlistItems();
+    }
+
+    /**
+     * Toggle wishlist item
+     */
+    window.toggleWishlist = async (id) => {
+        // Require login to add to wishlist
+        const user = sessionStorage.getItem('user');
+        if (!user) {
+            const loginModal = getEl('login-modal');
+            if (loginModal) loginModal.classList.add('active');
+            showToast("กรุณาเข้าสู่ระบบเพื่อเพิ่มรายการโปรด", "error");
+            return;
+        }
+
+        const product = products.find(p => p && p.id === id);
+        if (!product) return;
+
+        const index = wishlist.findIndex(item => item.id === id);
+
+        if (index > -1) {
+            wishlist.splice(index, 1);
+            showToast('นำออกจากรายการโปรด');
+        } else {
+            wishlist.push({
+                id: product.id,
+                name: product.name,
+                price: product.price,
+                image: product.image
+            });
+            showToast('เพิ่มลงรายการโปรดแล้ว ❤️');
+        }
+
+        // Save to Firebase
+        if (userProfile?.uid) {
+            await database.ref('users/' + userProfile.uid + '/wishlist').set(wishlist);
+        }
+
+        updateWishlistUI();
+        renderProducts(document.querySelector('.filter-btn.active')?.dataset.category || 'all');
+        renderShowcaseSections();
+    };
+
+    /**
+     * Check if product is in wishlist
+     */
+    function isInWishlist(id) {
+        return wishlist.some(item => item.id === id);
+    }
+
+    /**
+     * Render wishlist items in modal
+     */
+    function renderWishlistItems() {
+        const container = getEl('wishlist-items-container');
+        if (!container) return;
+
+        if (wishlist.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="fa-solid fa-heart-crack"></i>
+                    <h3>ยังไม่มีรายการโปรด</h3>
+                    <p>กดปุ่ม ❤️ บนสินค้าที่ชอบ</p>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = wishlist.map(item => `
+            <div class="wishlist-item">
+                <img src="${item.image}" alt="${sanitizeHTML(item.name)}" onerror="this.src='https://placehold.co/70x70?text=...'">
+                <div class="wishlist-item-info">
+                    <h4>${sanitizeHTML(item.name)}</h4>
+                    <span class="price">${item.price.toLocaleString()} ฿</span>
+                </div>
+                <div class="wishlist-item-actions">
+                    <button class="wishlist-add-cart-btn" onclick="window.addToCart(${item.id}); window.closeWishlistModal();">
+                        <i class="fa-solid fa-cart-plus"></i>
+                    </button>
+                    <button class="wishlist-remove-btn" onclick="window.toggleWishlist(${item.id})">
+                        <i class="fa-solid fa-trash"></i> ลบ
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    window.closeWishlistModal = () => {
+        const modal = getEl('wishlist-modal');
+        if (modal) modal.classList.remove('active');
+    };
+
+    // ==========================================
+    // ORDER TRACKING SYSTEM
+    // ==========================================
+
+    /**
+     * View order detail modal
+     */
+    window.viewOrderDetail = async (orderId) => {
+        const modal = getEl('order-detail-modal');
+        const content = getEl('order-detail-content');
+        if (!modal || !content) return;
+
+        content.innerHTML = `
+            <div style="text-align: center; padding: 50px;">
+                <i class="fa-solid fa-spinner fa-spin" style="font-size: 2rem; color: var(--light-moss);"></i>
+                <p style="margin-top: 15px; color: var(--light-moss);">กำลังโหลดข้อมูล...</p>
+            </div>
+        `;
+        modal.classList.add('active');
+
+        try {
+            const order = await getOrderById(orderId);
+            if (!order) {
+                content.innerHTML = `
+                    <div style="text-align: center; padding: 50px;">
+                        <i class="fa-solid fa-circle-xmark" style="font-size: 2rem; color: #ff6b6b;"></i>
+                        <p style="margin-top: 15px; color: #ff6b6b;">ไม่พบข้อมูลคำสั่งซื้อ</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const statusSteps = [
+                { key: 'pending_payment', icon: 'fa-clock', label: 'รอชำระเงิน' },
+                { key: 'paid', icon: 'fa-credit-card', label: 'ชำระแล้ว' },
+                { key: 'shipped', icon: 'fa-truck', label: 'กำลังจัดส่ง' },
+                { key: 'completed', icon: 'fa-check-circle', label: 'ส่งสำเร็จ' }
+            ];
+
+            const currentStatusIndex = statusSteps.findIndex(s => s.key === order.status);
+
+            content.innerHTML = `
+                <div class="order-detail-section">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 25px;">
+                        <div>
+                            <div style="font-size: 0.85rem; color: var(--light-moss); margin-bottom: 5px;">หมายเลขคำสั่งซื้อ</div>
+                            <div style="font-size: 1.2rem; font-weight: 800; color: var(--dappled-gold);">${sanitizeHTML(order.orderId)}</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 0.85rem; color: var(--light-moss); margin-bottom: 5px;">วันที่สั่งซื้อ</div>
+                            <div style="font-size: 1rem; color: var(--white);">${new Date(order.createdAt).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="order-status-timeline">
+                        ${statusSteps.map((step, i) => `
+                            <div class="status-step ${i < currentStatusIndex ? 'completed' : ''} ${i === currentStatusIndex ? 'active' : ''}">
+                                <div class="status-icon"><i class="fa-solid ${step.icon}"></i></div>
+                                <div class="status-label">${step.label}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                    
+                    ${order.trackingNumber ? `
+                        <div class="tracking-number-box">
+                            <i class="fa-solid fa-barcode"></i>
+                            <div>
+                                <div style="font-size: 0.75rem; color: var(--light-moss);">หมายเลขพัสดุ</div>
+                                <span>${sanitizeHTML(order.trackingNumber)}</span>
+                            </div>
+                        </div>
+                    ` : ''}
+                    
+                    <div class="order-items-list">
+                        <div style="font-weight: 700; color: var(--white); margin-bottom: 15px;">
+                            <i class="fa-solid fa-box"></i> รายการสินค้า
+                        </div>
+                        ${order.items.map(item => `
+                            <div class="order-item-row">
+                                <span style="color: var(--white);">${sanitizeHTML(item.name)} <span style="color: var(--light-moss);">x${item.qty}</span></span>
+                                <span style="color: var(--dappled-gold); font-weight: 700;">${(item.price * item.qty).toLocaleString()} ฿</span>
+                            </div>
+                        `).join('')}
+                        <div class="order-item-row" style="border-top: 1px solid var(--glass-border); margin-top: 10px; padding-top: 15px;">
+                            <span style="color: var(--light-moss);">ค่าจัดส่ง</span>
+                            <span style="color: var(--white);">${(order.shipping || 100).toLocaleString()} ฿</span>
+                        </div>
+                        <div class="order-item-row" style="border-top: 1px solid var(--glass-border); padding-top: 15px;">
+                            <span style="color: var(--white); font-weight: 700; font-size: 1.1rem;">รวมทั้งหมด</span>
+                            <span style="color: var(--dappled-gold); font-weight: 900; font-size: 1.3rem;">${order.total.toLocaleString()} ฿</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } catch (err) {
+            console.error('Error loading order detail:', err);
+            content.innerHTML = `
+                <div style="text-align: center; padding: 50px;">
+                    <i class="fa-solid fa-circle-exclamation" style="font-size: 2rem; color: #ff6b6b;"></i>
+                    <p style="margin-top: 15px; color: #ff6b6b;">เกิดข้อผิดพลาดในการโหลดข้อมูล</p>
+                </div>
+            `;
+        }
+    };
+
+    // ==========================================
+    // BACK IN STOCK NOTIFICATION
+    // ==========================================
+
+    /**
+     * Open stock notification modal
+     */
+    window.openNotifyModal = (productId) => {
+        notifyProductId = productId;
+        const product = products.find(p => p && p.id === productId);
+        if (!product) return;
+
+        const modal = getEl('notify-modal');
+        const nameEl = getEl('notify-product-name');
+        const emailEl = getEl('notify-email');
+
+        if (nameEl) nameEl.textContent = product.name;
+        if (emailEl) emailEl.value = userProfile?.email || '';
+        if (modal) modal.classList.add('active');
+    };
+
+    /**
+     * Submit stock notification request
+     */
+    window.submitStockNotification = async () => {
+        const email = getEl('notify-email')?.value?.trim();
+        if (!email || !email.includes('@')) {
+            showToast('กรุณากรอกอีเมลที่ถูกต้อง', 'error');
+            return;
+        }
+
+        if (!notifyProductId) return;
+        const product = products.find(p => p && p.id === notifyProductId);
+        if (!product) return;
+
+        try {
+            await database.ref('stockNotifications').push({
+                productId: notifyProductId,
+                productName: product.name,
+                email: email,
+                createdAt: new Date().toISOString(),
+                notified: false
+            });
+
+            showToast('ตั้งค่าแจ้งเตือนเรียบร้อยแล้ว! 🔔');
+            getEl('notify-modal')?.classList.remove('active');
+            notifyProductId = null;
+        } catch (err) {
+            console.error('Stock notification error:', err);
+            showToast('เกิดข้อผิดพลาด กรุณาลองใหม่', 'error');
+        }
+    };
+
+    // ==========================================
+    // LANDING PAGE SHOWCASE
+    // ==========================================
+
+    /**
+     * Render all showcase sections
+     */
+    function renderShowcaseSections() {
+        // Best Sellers - products marked by admin with isBestSeller flag
+        const bestSellers = products.filter(p => p && p.isBestSeller === true).slice(0, 8);
+
+        // If no best sellers marked, show message
+        if (bestSellers.length === 0) {
+            const container = getEl('bestseller-products');
+            if (container) {
+                container.innerHTML = '<p style="text-align: center; color: var(--light-moss); opacity: 0.6; grid-column: 1/-1; padding: 30px;">ยังไม่มีสินค้าขายดี - Admin สามารถตั้งค่าได้ในหน้าจัดการสต็อก</p>';
+            }
+            return;
+        }
+
+        renderShowcaseGrid('bestseller-products', bestSellers, 'bestseller');
+    }
+
+    /**
+     * Render showcase grid
+     */
+    function renderShowcaseGrid(containerId, items, badgeType) {
+        const container = getEl(containerId);
+        if (!container) return;
+
+        if (!items || items.length === 0) {
+            container.innerHTML = '<p style="text-align: center; color: var(--light-moss); opacity: 0.5; grid-column: 1/-1;">ไม่มีสินค้าในหมวดหมู่นี้</p>';
+            return;
+        }
+
+        const badgeConfig = {
+            'featured': { class: 'badge-featured', text: '⭐ แนะนำ' },
+            'bestseller': { class: 'badge-bestseller', text: '🔥 ขายดี' },
+            'new': { class: 'badge-new', text: '✨ ใหม่' }
+        };
+
+        const badge = badgeConfig[badgeType];
+
+        container.innerHTML = items.map(p => {
+            if (!p) return '';
+            const isOutOfStock = p.stock <= 0;
+            const inWishlist = isInWishlist(p.id);
+
+            return `
+                <div class="showcase-card">
+                    <span class="showcase-badge ${badge.class}">${badge.text}</span>
+                    <button class="wishlist-heart-btn ${inWishlist ? 'active' : ''}" onclick="window.toggleWishlist(${p.id})">
+                        <i class="fa-${inWishlist ? 'solid' : 'regular'} fa-heart"></i>
+                    </button>
+                    <div class="product-image">
+                        ${isOutOfStock ? '<div class="out-of-stock-badge">หมดชั่วคราว</div>' : ''}
+                        <img src="${p.image}" alt="${sanitizeHTML(p.name)}" class="${isOutOfStock ? 'grayscale' : ''}" onerror="this.src='https://placehold.co/400x400?text=No+Image'">
+                    </div>
+                    <div class="product-info">
+                        <h3 class="product-name" style="font-size: 1.1rem;">${sanitizeHTML(p.name)}</h3>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
+                            <span class="product-price" style="font-size: 1.4rem;">${p.price.toLocaleString()} ฿</span>
+                            ${!isOutOfStock ? `
+                                <button class="add-to-cart-btn" onclick="window.addToCart(${p.id})" style="width: 42px; height: 42px;">
+                                    <i class="fa-solid fa-cart-plus"></i>
+                                </button>
+                            ` : `
+                                <button class="notify-stock-btn" onclick="window.openNotifyModal(${p.id})" style="padding: 8px 12px; font-size: 0.75rem;">
+                                    <i class="fa-solid fa-bell"></i>
+                                </button>
+                            `}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    // ==========================================
+    // ADDITIONAL EVENT LISTENERS FOR NEW FEATURES
+    // ==========================================
+
+    // Add to setupEventListeners or call separately
+    const wishlistTrigger = getEl('wishlist-trigger');
+    const wishlistModal = getEl('wishlist-modal');
+    const closeWishlist = getEl('close-wishlist');
+
+    if (wishlistTrigger && wishlistModal) {
+        wishlistTrigger.addEventListener('click', () => wishlistModal.classList.add('active'));
+    }
+    if (closeWishlist) {
+        closeWishlist.addEventListener('click', () => wishlistModal.classList.remove('active'));
+    }
+
+    const closeNotify = getEl('close-notify');
+    if (closeNotify) {
+        closeNotify.addEventListener('click', () => getEl('notify-modal')?.classList.remove('active'));
+    }
+
+    const closeOrderDetail = getEl('close-order-detail');
+    if (closeOrderDetail) {
+        closeOrderDetail.addEventListener('click', () => getEl('order-detail-modal')?.classList.remove('active'));
+    }
 
     // Start
     if (document.readyState === 'loading') {
