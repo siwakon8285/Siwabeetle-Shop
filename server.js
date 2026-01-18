@@ -6,13 +6,48 @@
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const db = require('./db');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// ตั้งค่า middleware
+// ==========================================
+// SECURITY MIDDLEWARE
+// ==========================================
+
+// Helmet - ตั้งค่า HTTP security headers
+app.use(helmet({
+    contentSecurityPolicy: false, // ปิดไว้เพราะใช้ inline scripts
+    crossOriginEmbedderPolicy: false
+}));
+
+// Rate Limiting - จำกัดจำนวน request ต่อ IP
+const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 นาที
+    max: 100, // จำกัด 100 requests ต่อ IP ต่อ 15 นาที
+    message: { message: 'คำขอมากเกินไป กรุณารอสักครู่แล้วลองใหม่' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+// Rate limit เข้มงวดสำหรับ auth endpoints (ป้องกัน brute-force)
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 นาที
+    max: 5, // จำกัด 5 ครั้งต่อ IP (login/register)
+    message: { message: 'พยายามเข้าสู่ระบบมากเกินไป กรุณารอ 15 นาที' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+// ใช้ rate limiting กับทุก API
+app.use('/api/', apiLimiter);
+
+// ==========================================
+// BASIC MIDDLEWARE
+// ==========================================
 app.use(cors());  // อนุญาต Cross-Origin requests
 app.use(express.json());  // รับข้อมูล JSON จาก request body
 
@@ -30,7 +65,7 @@ app.use(express.json());  // รับข้อมูล JSON จาก request 
  * 2. เข้ารหัส password ด้วย bcrypt
  * 3. บันทึกข้อมูลลงฐานข้อมูล PostgreSQL
  */
-app.post('/api/register', async (req, res) => {
+app.post('/api/register', authLimiter, async (req, res) => {
     const { username, password } = req.body;
     try {
         // ตรวจสอบว่า username มีอยู่แล้วหรือไม่
@@ -64,7 +99,7 @@ app.post('/api/register', async (req, res) => {
  * 2. ตรวจสอบ password ด้วย bcrypt.compare
  * 3. ส่งข้อมูลผู้ใช้กลับไป (ไม่รวม password)
  */
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', authLimiter, async (req, res) => {
     const { username, password } = req.body;
     try {
         // ค้นหาผู้ใช้ในฐานข้อมูล

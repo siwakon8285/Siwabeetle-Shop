@@ -2462,3 +2462,13 @@ main {
         font-size: 1rem;
     }
 }
+
+/* ==========================================
+   reCAPTCHA v3 Badge - ซ่อน badge มุมขวาล่าง
+   แต่ยังคงทำงานได้ปกติ
+   ========================================== */
+.grecaptcha-badge {
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
