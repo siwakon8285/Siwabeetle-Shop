@@ -890,6 +890,7 @@ header.scrolled {
     padding: 1px;
     background: linear-gradient(135deg, rgba(116, 198, 157, 0.2), transparent, rgba(255, 183, 3, 0.1));
     -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     -webkit-mask-composite: xor;
     mask-composite: exclude;
     pointer-events: none;
