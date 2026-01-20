@@ -916,37 +916,35 @@
             if (order.trackingNumber) {
                 const trackingNum = order.trackingNumber.toUpperCase().trim();
                 
-                // Detect carrier based on tracking number pattern
-                let carrier = { name: 'ไปรษณีย์ไทย', icon: 'fa-envelope', color: '#e74c3c', url: `https://track.thailandpost.com/?trackNumber=${encodeURIComponent(trackingNum)}` };
+                // Carrier configurations
+                const carrierConfigs = {
+                    shopee: { name: 'Shopee XPress', icon: 'fa-cart-shopping', color: '#ee4d2d', url: `https://parcelsapp.com/en/tracking/${encodeURIComponent(trackingNum)}` },
+                    flash: { name: 'Flash Express', icon: 'fa-bolt', color: '#ffcc00', url: `https://www.flashexpress.co.th/tracking/?se=${encodeURIComponent(trackingNum)}` },
+                    kerry: { name: 'Kerry Express', icon: 'fa-truck-fast', color: '#ff6600', url: `https://th.kerryexpress.com/th/track/?track=${encodeURIComponent(trackingNum)}` },
+                    jt: { name: 'J&T Express', icon: 'fa-box', color: '#d4242d', url: `https://www.jtexpress.co.th/service/track?bills=${encodeURIComponent(trackingNum)}` },
+                    thaipost: { name: 'ไปรษณีย์ไทย', icon: 'fa-envelope', color: '#e74c3c', url: `https://track.thailandpost.com/?trackNumber=${encodeURIComponent(trackingNum)}` }
+                };
                 
-                if (trackingNum.startsWith('KR') || trackingNum.startsWith('KEX')) {
-                    carrier = { 
-                        name: 'Kerry Express', 
-                        icon: 'fa-truck-fast', 
-                        color: '#ff6600',
-                        url: `https://th.kerryexpress.com/th/track/?track=${encodeURIComponent(trackingNum)}`
-                    };
-                } else if (trackingNum.startsWith('TH') && trackingNum.length >= 13) {
-                    carrier = { 
-                        name: 'Flash Express', 
-                        icon: 'fa-bolt', 
-                        color: '#ffcc00',
-                        url: `https://www.flashexpress.co.th/tracking/?se=${encodeURIComponent(trackingNum)}`
-                    };
-                } else if (/^[0-9]{13,}$/.test(trackingNum) || trackingNum.startsWith('82')) {
-                    carrier = { 
-                        name: 'J&T Express', 
-                        icon: 'fa-box', 
-                        color: '#d4242d',
-                        url: `https://www.jtexpress.co.th/service/track?bills=${encodeURIComponent(trackingNum)}`
-                    };
-                } else if (trackingNum.startsWith('E') && trackingNum.endsWith('TH')) {
-                    carrier = { 
-                        name: 'ไปรษณีย์ไทย', 
-                        icon: 'fa-envelope', 
-                        color: '#e74c3c',
-                        url: `https://track.thailandpost.com/?trackNumber=${encodeURIComponent(trackingNum)}`
-                    };
+                let carrier;
+                
+                // Use carrier from Firebase if admin selected one
+                if (order.carrier && order.carrier !== 'auto' && carrierConfigs[order.carrier]) {
+                    carrier = carrierConfigs[order.carrier];
+                } else {
+                    // Auto-detect carrier based on tracking number pattern
+                    carrier = carrierConfigs.thaipost; // Default
+                    
+                    if (trackingNum.startsWith('KR') || trackingNum.startsWith('KEX')) {
+                        carrier = carrierConfigs.kerry;
+                    } else if ((trackingNum.startsWith('TH') && /[A-Z]$/.test(trackingNum)) || trackingNum.startsWith('SPX') || trackingNum.startsWith('SPXTH')) {
+                        carrier = carrierConfigs.shopee;
+                    } else if (trackingNum.startsWith('TH') && trackingNum.length >= 13) {
+                        carrier = carrierConfigs.flash;
+                    } else if (/^[0-9]{13,}$/.test(trackingNum) || trackingNum.startsWith('82')) {
+                        carrier = carrierConfigs.jt;
+                    } else if (trackingNum.startsWith('E') && trackingNum.endsWith('TH')) {
+                        carrier = carrierConfigs.thaipost;
+                    }
                 }
 
                 trackingHTML = `
@@ -2106,6 +2104,14 @@
                                 <option value="completed" ${order.status === 'completed' ? 'selected' : ''}>✅ สำเร็จ</option>
                                 <option value="cancelled" ${order.status === 'cancelled' ? 'selected' : ''}>❌ ยกเลิก</option>
                             </select>
+                            <select class="order-carrier-select" data-order-carrier="${order.orderId}">
+                                <option value="auto" ${(!order.carrier || order.carrier === 'auto') ? 'selected' : ''}>🔍 ตรวจจับอัตโนมัติ</option>
+                                <option value="shopee" ${order.carrier === 'shopee' ? 'selected' : ''}>🛒 Shopee XPress</option>
+                                <option value="flash" ${order.carrier === 'flash' ? 'selected' : ''}>⚡ Flash Express</option>
+                                <option value="kerry" ${order.carrier === 'kerry' ? 'selected' : ''}>🚚 Kerry Express</option>
+                                <option value="jt" ${order.carrier === 'jt' ? 'selected' : ''}>📦 J&T Express</option>
+                                <option value="thaipost" ${order.carrier === 'thaipost' ? 'selected' : ''}>📮 ไปรษณีย์ไทย</option>
+                            </select>
                             <input type="text" class="order-tracking-input" 
                                 data-order-tracking="${order.orderId}" 
                                 placeholder="เลขพัสดุ" 
@@ -2464,15 +2470,53 @@
                         `).join('')}
                     </div>
                     
-                    ${order.trackingNumber ? `
+                    ${order.trackingNumber ? (() => {
+                        const trackingNum = order.trackingNumber.toUpperCase().trim();
+                        
+                        // Carrier configurations
+                        const carrierConfigs = {
+                            shopee: { name: 'Shopee XPress', icon: 'fa-cart-shopping', color: '#ee4d2d', url: `https://parcelsapp.com/en/tracking/${encodeURIComponent(trackingNum)}` },
+                            flash: { name: 'Flash Express', icon: 'fa-bolt', color: '#ffcc00', url: `https://www.flashexpress.co.th/tracking/?se=${encodeURIComponent(trackingNum)}` },
+                            kerry: { name: 'Kerry Express', icon: 'fa-truck-fast', color: '#ff6600', url: `https://th.kerryexpress.com/th/track/?track=${encodeURIComponent(trackingNum)}` },
+                            jt: { name: 'J&T Express', icon: 'fa-box', color: '#d4242d', url: `https://www.jtexpress.co.th/service/track?bills=${encodeURIComponent(trackingNum)}` },
+                            thaipost: { name: 'ไปรษณีย์ไทย', icon: 'fa-envelope', color: '#e74c3c', url: `https://track.thailandpost.com/?trackNumber=${encodeURIComponent(trackingNum)}` }
+                        };
+                        
+                        let carrier;
+                        
+                        // Use carrier from Firebase if admin selected one
+                        if (order.carrier && order.carrier !== 'auto' && carrierConfigs[order.carrier]) {
+                            carrier = carrierConfigs[order.carrier];
+                        } else {
+                            // Auto-detect carrier based on tracking number
+                            carrier = carrierConfigs.thaipost; // Default
+                            
+                            if (trackingNum.startsWith('KR') || trackingNum.startsWith('KEX')) {
+                                carrier = carrierConfigs.kerry;
+                            } else if ((trackingNum.startsWith('TH') && /[A-Z]$/.test(trackingNum)) || trackingNum.startsWith('SPX') || trackingNum.startsWith('SPXTH')) {
+                                carrier = carrierConfigs.shopee;
+                            } else if (trackingNum.startsWith('TH') && trackingNum.length >= 13) {
+                                carrier = carrierConfigs.flash;
+                            } else if (/^[0-9]{13,}$/.test(trackingNum) || trackingNum.startsWith('82')) {
+                                carrier = carrierConfigs.jt;
+                            } else if (trackingNum.startsWith('E') && trackingNum.endsWith('TH')) {
+                                carrier = carrierConfigs.thaipost;
+                            }
+                        }
+                        
+                        return `
                         <div class="tracking-number-box">
-                            <i class="fa-solid fa-barcode"></i>
+                            <i class="fa-solid ${carrier.icon}" style="color: ${carrier.color};"></i>
                             <div>
-                                <div style="font-size: 0.75rem; color: var(--light-moss);">หมายเลขพัสดุ</div>
+                                <div style="font-size: 0.7rem; color: var(--light-moss); margin-bottom: 3px;">${carrier.name}</div>
                                 <span>${sanitizeHTML(order.trackingNumber)}</span>
                             </div>
-                        </div>
-                    ` : ''}
+                            <button onclick="window.open('${carrier.url}', '_blank')" 
+                                style="margin-left: auto; padding: 10px 18px; background: ${carrier.color}; border: none; border-radius: 10px; color: white; cursor: pointer; font-size: 0.85rem; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                                <i class="fa-solid fa-location-dot"></i> ติดตามพัสดุ
+                            </button>
+                        </div>`;
+                    })() : ''}
                     
                     <div class="order-items-list">
                         <div style="font-weight: 700; color: var(--white); margin-bottom: 15px;">
@@ -2914,11 +2958,13 @@
      */
     window.saveOrderUpdate = async (orderId) => {
         const statusSelect = document.querySelector(`[data-order-status="${orderId}"]`);
+        const carrierSelect = document.querySelector(`[data-order-carrier="${orderId}"]`);
         const trackingInput = document.querySelector(`[data-order-tracking="${orderId}"]`);
 
         if (!statusSelect) return;
 
         const newStatus = statusSelect.value;
+        const carrier = carrierSelect ? carrierSelect.value : 'auto';
         const trackingNumber = trackingInput ? trackingInput.value.trim() : '';
 
         try {
@@ -2926,8 +2972,12 @@
             if (trackingNumber) {
                 await window.updateTrackingNumber(orderId, trackingNumber);
             }
+            // Save carrier selection
+            await database.ref('orders/' + orderId + '/carrier').set(carrier);
+            showToast('บันทึกข้อมูลเรียบร้อย');
         } catch (err) {
             console.error('Error saving order update:', err);
+            showToast('เกิดข้อผิดพลาดในการบันทึก', 'error');
         }
     };
 

@@ -621,6 +621,49 @@ header.scrolled {
 }
 
 .shipping-row {
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 15px;
+    padding-bottom: 15px;
+    border-bottom: none;
+}
+
+.shipping-select {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 12px 15px;
+    color: var(--white);
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2374c69d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 18px;
+}
+
+.shipping-select:hover {
+    border-color: var(--light-moss);
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.shipping-select:focus {
+    outline: none;
+    border-color: var(--dappled-gold);
+    box-shadow: 0 0 0 3px rgba(255, 183, 3, 0.15);
+}
+
+.shipping-select option {
+    background: var(--deep-forest);
+    color: var(--white);
+    padding: 10px;
+}
+
+.shipping-cost-row {
     margin-bottom: 20px;
     padding-bottom: 20px;
     border-bottom: 1px dashed var(--glass-border);
@@ -3146,6 +3189,7 @@ main {
     }
 
     .order-status-select,
+    .order-carrier-select,
     .order-tracking-input {
         min-width: 100%;
     }
@@ -3160,4 +3204,543 @@ main {
 .product-card .wishlist-heart-btn {
     position: relative;
     z-index: 5;
+}
+
+/* ============================================
+   ENHANCED ORDER DETAIL & ADMIN PANEL UI
+   ============================================ */
+
+/* Order Status Timeline - Enhanced */
+.order-status-timeline {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 30px 20px;
+    background: linear-gradient(135deg, rgba(0,0,0,0.3), rgba(0,0,0,0.1));
+    border-radius: 20px;
+    margin: 20px 0;
+    position: relative;
+    overflow: hidden;
+}
+
+.order-status-timeline::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 10%;
+    right: 10%;
+    height: 3px;
+    background: rgba(255,255,255,0.1);
+    transform: translateY(-15px);
+    z-index: 0;
+}
+
+.status-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    z-index: 1;
+    flex: 1;
+}
+
+.status-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.05);
+    border: 2px solid rgba(255,255,255,0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    color: rgba(255,255,255,0.4);
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.status-step.completed .status-icon {
+    background: var(--moss-green);
+    border-color: var(--light-moss);
+    color: white;
+    box-shadow: 0 5px 20px rgba(64, 145, 108, 0.4);
+}
+
+.status-step.active .status-icon {
+    background: var(--grad-gold);
+    border-color: var(--dappled-gold);
+    color: var(--deep-forest);
+    transform: scale(1.15);
+    box-shadow: 0 8px 25px rgba(255, 183, 3, 0.5);
+    animation: statusPulse 2s infinite;
+}
+
+@keyframes statusPulse {
+    0%, 100% { box-shadow: 0 8px 25px rgba(255, 183, 3, 0.5); }
+    50% { box-shadow: 0 8px 35px rgba(255, 183, 3, 0.8); }
+}
+
+.status-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: rgba(255,255,255,0.5);
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.status-step.completed .status-label {
+    color: var(--light-moss);
+}
+
+.status-step.active .status-label {
+    color: var(--dappled-gold);
+    font-weight: 800;
+}
+
+/* Enhanced Tracking Number Box */
+.tracking-number-box {
+    background: linear-gradient(135deg, rgba(238, 77, 45, 0.15), rgba(255, 183, 3, 0.1));
+    border: 1px solid rgba(255, 183, 3, 0.3);
+    border-radius: 18px;
+    padding: 18px 25px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    margin: 20px 0;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.tracking-number-box::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 5px;
+    height: 100%;
+    background: var(--grad-gold);
+}
+
+.tracking-number-box:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 30px rgba(255, 183, 3, 0.2);
+}
+
+.tracking-number-box i {
+    font-size: 1.8rem;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255,255,255,0.05);
+    border-radius: 12px;
+}
+
+.tracking-number-box span {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: white;
+    letter-spacing: 3px;
+    font-family: 'Outfit', sans-serif;
+}
+
+/* Order Detail Section */
+.order-detail-section {
+    padding: 25px;
+}
+
+.order-items-list {
+    background: rgba(0,0,0,0.2);
+    border-radius: 16px;
+    padding: 20px;
+    margin-top: 20px;
+}
+
+.order-item-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.order-item-row:last-child {
+    border-bottom: none;
+}
+
+/* Admin Panel - Order Management Enhanced */
+.order-admin-controls {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+    flex-wrap: wrap;
+    padding: 15px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 15px;
+    border: 1px solid rgba(255,255,255,0.05);
+}
+
+.order-status-select,
+.order-carrier-select {
+    flex: 1;
+    min-width: 140px;
+    padding: 12px 15px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    color: white;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2374c69d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 16px;
+}
+
+.order-status-select:hover,
+.order-carrier-select:hover {
+    border-color: var(--light-moss);
+    background-color: rgba(255,255,255,0.08);
+}
+
+.order-status-select:focus,
+.order-carrier-select:focus {
+    outline: none;
+    border-color: var(--dappled-gold);
+    box-shadow: 0 0 0 3px rgba(255, 183, 3, 0.15);
+}
+
+.order-status-select option,
+.order-carrier-select option {
+    background: var(--deep-forest);
+    color: white;
+    padding: 10px;
+}
+
+.order-tracking-input {
+    flex: 2;
+    min-width: 180px;
+    padding: 12px 15px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    color: white;
+    font-size: 0.95rem;
+    font-weight: 600;
+    letter-spacing: 2px;
+    font-family: 'Outfit', sans-serif;
+    transition: all 0.3s ease;
+}
+
+.order-tracking-input::placeholder {
+    color: rgba(255,255,255,0.3);
+    font-family: 'Prompt', sans-serif;
+    letter-spacing: 0;
+}
+
+.order-tracking-input:focus {
+    outline: none;
+    border-color: var(--dappled-gold);
+    background: rgba(255,255,255,0.08);
+    box-shadow: 0 0 0 3px rgba(255, 183, 3, 0.15);
+}
+
+.order-save-btn {
+    padding: 12px 20px;
+    background: var(--moss-green);
+    border: none;
+    border-radius: 12px;
+    color: white;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+}
+
+.order-save-btn:hover {
+    background: var(--light-moss);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(64, 145, 108, 0.4);
+}
+
+.order-save-btn:active {
+    transform: translateY(0);
+}
+
+/* Admin Product List (Stock Management) */
+.admin-product-list {
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.admin-product-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.admin-product-list::-webkit-scrollbar-track {
+    background: rgba(0,0,0,0.2);
+    border-radius: 3px;
+}
+
+.admin-product-list::-webkit-scrollbar-thumb {
+    background: var(--moss-green);
+    border-radius: 3px;
+}
+
+.admin-product-item {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 15px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 16px;
+    transition: all 0.3s ease;
+}
+
+.admin-product-item:hover {
+    background: rgba(255,255,255,0.08);
+    border-color: var(--glass-border);
+    transform: translateX(5px);
+}
+
+.admin-product-item img {
+    width: 60px;
+    height: 60px;
+    border-radius: 12px;
+    object-fit: cover;
+    border: 2px solid rgba(255,255,255,0.1);
+}
+
+.admin-product-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.admin-product-name {
+    font-weight: 700;
+    color: white;
+    font-size: 0.95rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.admin-product-category {
+    font-size: 0.75rem;
+    color: var(--light-moss);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 4px;
+}
+
+.admin-stock-input {
+    width: 80px;
+    padding: 10px 15px;
+    background: rgba(0,0,0,0.3);
+    border: 2px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    color: var(--dappled-gold);
+    font-size: 1.1rem;
+    font-weight: 800;
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+.admin-stock-input:focus {
+    outline: none;
+    border-color: var(--dappled-gold);
+    background: rgba(255, 183, 3, 0.1);
+    box-shadow: 0 0 0 3px rgba(255, 183, 3, 0.15);
+}
+
+/* Admin Tabs */
+.admin-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    padding: 10px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 16px;
+}
+
+.admin-tab {
+    flex: 1;
+    padding: 12px 20px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    color: var(--light-moss);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.admin-tab:hover {
+    background: rgba(255,255,255,0.05);
+    color: white;
+}
+
+.admin-tab.active {
+    background: var(--moss-green);
+    color: white;
+    border-color: var(--light-moss);
+    box-shadow: 0 5px 20px rgba(64, 145, 108, 0.3);
+}
+
+/* Order Card in Admin */
+.admin-order-card {
+    background: linear-gradient(135deg, rgba(0,0,0,0.4), rgba(0,0,0,0.2));
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 20px;
+    padding: 20px;
+    margin-bottom: 15px;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.admin-order-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: var(--moss-green);
+}
+
+.admin-order-card:hover {
+    border-color: var(--glass-border);
+    transform: translateY(-3px);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
+
+.admin-order-card.status-pending::before {
+    background: #ffc107;
+}
+
+.admin-order-card.status-paid::before {
+    background: #28a745;
+}
+
+.admin-order-card.status-shipped::before {
+    background: #007bff;
+}
+
+.admin-order-card.status-completed::before {
+    background: var(--dappled-gold);
+}
+
+.admin-order-card.status-cancelled::before {
+    background: #dc3545;
+}
+
+/* Status Badge */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.status-badge.pending {
+    background: rgba(255, 193, 7, 0.2);
+    color: #ffc107;
+    border: 1px solid rgba(255, 193, 7, 0.3);
+}
+
+.status-badge.paid {
+    background: rgba(40, 167, 69, 0.2);
+    color: #28a745;
+    border: 1px solid rgba(40, 167, 69, 0.3);
+}
+
+.status-badge.shipped {
+    background: rgba(0, 123, 255, 0.2);
+    color: #007bff;
+    border: 1px solid rgba(0, 123, 255, 0.3);
+}
+
+.status-badge.completed {
+    background: rgba(255, 183, 3, 0.2);
+    color: var(--dappled-gold);
+    border: 1px solid rgba(255, 183, 3, 0.3);
+}
+
+.status-badge.cancelled {
+    background: rgba(220, 53, 69, 0.2);
+    color: #dc3545;
+    border: 1px solid rgba(220, 53, 69, 0.3);
+}
+
+/* Mobile Responsive */
+@media (max-width: 600px) {
+    .order-status-timeline {
+        padding: 20px 10px;
+    }
+    
+    .status-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 0.9rem;
+    }
+    
+    .status-label {
+        font-size: 0.6rem;
+    }
+    
+    .tracking-number-box {
+        flex-direction: column;
+        text-align: center;
+        padding: 20px;
+    }
+    
+    .tracking-number-box::before {
+        width: 100%;
+        height: 4px;
+        top: 0;
+        left: 0;
+    }
+    
+    .tracking-number-box button {
+        width: 100%;
+        margin-top: 10px;
+        justify-content: center;
+    }
+    
+    .order-admin-controls {
+        flex-direction: column;
+    }
+    
+    .order-status-select,
+    .order-carrier-select,
+    .order-tracking-input {
+        min-width: 100%;
+    }
+    
+    .admin-tabs {
+        flex-direction: column;
+    }
 }
