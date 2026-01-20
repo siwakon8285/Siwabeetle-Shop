@@ -840,6 +840,195 @@
     window.loadOrderHistory = loadOrderHistory;
 
     /**
+     * View order detail with tracking timeline
+     * @param {string} orderId - Order ID to view
+     */
+    window.viewOrderDetail = async (orderId) => {
+        const modal = getEl('order-detail-modal');
+        const content = getEl('order-detail-content');
+        
+        if (!modal || !content) return;
+
+        content.innerHTML = `
+            <div style="text-align: center; padding: 40px;">
+                <i class="fa-solid fa-spinner fa-spin" style="font-size: 2rem; color: var(--moss-green);"></i>
+            </div>
+        `;
+        modal.classList.add('active');
+
+        try {
+            // Try to get full order details
+            const snapshot = await database.ref('orders/' + orderId).once('value');
+            let order = snapshot.val();
+            
+            // If not found in main orders, it might be user's simplified view
+            if (!order && userProfile) {
+                const userOrderSnapshot = await database.ref('users/' + userProfile.uid + '/orders/' + orderId).once('value');
+                order = userOrderSnapshot.val();
+            }
+
+            if (!order) {
+                content.innerHTML = `<p style="color: #ff6b6b;">ไม่พบข้อมูลคำสั่งซื้อ</p>`;
+                return;
+            }
+
+            // Status configuration
+            const statusOrder = ['pending_payment', 'paid', 'shipped', 'completed'];
+            const statusConfig = {
+                'pending_payment': { icon: 'fa-clock', text: 'รอชำระเงิน', color: '#ffc107' },
+                'paid': { icon: 'fa-credit-card', text: 'ชำระแล้ว', color: '#28a745' },
+                'shipped': { icon: 'fa-truck', text: 'จัดส่งแล้ว', color: '#007bff' },
+                'completed': { icon: 'fa-circle-check', text: 'สำเร็จ', color: '#52b788' },
+                'cancelled': { icon: 'fa-times-circle', text: 'ยกเลิก', color: '#dc3545' }
+            };
+
+            const currentStatusIndex = statusOrder.indexOf(order.status);
+            const orderDate = new Date(order.createdAt).toLocaleString('th-TH', {
+                day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'
+            });
+
+            // Build timeline HTML
+            let timelineHTML = '';
+            if (order.status !== 'cancelled') {
+                timelineHTML = `
+                    <div class="order-status-timeline">
+                        ${statusOrder.map((status, index) => {
+                            const config = statusConfig[status];
+                            let stepClass = '';
+                            if (index < currentStatusIndex) stepClass = 'completed';
+                            else if (index === currentStatusIndex) stepClass = 'active';
+                            
+                            return `
+                                <div class="status-step ${stepClass}">
+                                    <div class="status-icon">
+                                        <i class="fa-solid ${config.icon}"></i>
+                                    </div>
+                                    <div class="status-label">${config.text}</div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                `;
+            }
+
+            // Tracking number display with carrier detection
+            let trackingHTML = '';
+            if (order.trackingNumber) {
+                const trackingNum = order.trackingNumber.toUpperCase().trim();
+                
+                // Detect carrier based on tracking number pattern
+                let carrier = { name: 'ไปรษณีย์ไทย', icon: 'fa-envelope', color: '#e74c3c', url: `https://track.thailandpost.com/?trackNumber=${encodeURIComponent(trackingNum)}` };
+                
+                if (trackingNum.startsWith('KR') || trackingNum.startsWith('KEX')) {
+                    carrier = { 
+                        name: 'Kerry Express', 
+                        icon: 'fa-truck-fast', 
+                        color: '#ff6600',
+                        url: `https://th.kerryexpress.com/th/track/?track=${encodeURIComponent(trackingNum)}`
+                    };
+                } else if (trackingNum.startsWith('TH') && trackingNum.length >= 13) {
+                    carrier = { 
+                        name: 'Flash Express', 
+                        icon: 'fa-bolt', 
+                        color: '#ffcc00',
+                        url: `https://www.flashexpress.co.th/tracking/?se=${encodeURIComponent(trackingNum)}`
+                    };
+                } else if (/^[0-9]{13,}$/.test(trackingNum) || trackingNum.startsWith('82')) {
+                    carrier = { 
+                        name: 'J&T Express', 
+                        icon: 'fa-box', 
+                        color: '#d4242d',
+                        url: `https://www.jtexpress.co.th/service/track?bills=${encodeURIComponent(trackingNum)}`
+                    };
+                } else if (trackingNum.startsWith('E') && trackingNum.endsWith('TH')) {
+                    carrier = { 
+                        name: 'ไปรษณีย์ไทย', 
+                        icon: 'fa-envelope', 
+                        color: '#e74c3c',
+                        url: `https://track.thailandpost.com/?trackNumber=${encodeURIComponent(trackingNum)}`
+                    };
+                }
+
+                trackingHTML = `
+                    <div class="tracking-number-box">
+                        <i class="fa-solid ${carrier.icon}" style="color: ${carrier.color};"></i>
+                        <div>
+                            <div style="font-size: 0.7rem; color: var(--light-moss); margin-bottom: 3px;">${carrier.name}</div>
+                            <span>${sanitizeHTML(order.trackingNumber)}</span>
+                        </div>
+                        <button onclick="window.open('${carrier.url}', '_blank')" 
+                            style="margin-left: auto; padding: 8px 15px; background: ${carrier.color}; border: none; border-radius: 8px; color: white; cursor: pointer; font-size: 0.8rem; font-weight: 600;">
+                            <i class="fa-solid fa-external-link"></i> ติดตาม
+                        </button>
+                    </div>
+                `;
+            }
+
+            // Order items
+            let itemsHTML = '';
+            if (order.items && order.items.length > 0) {
+                itemsHTML = order.items.map(item => `
+                    <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <div>
+                            <div style="font-weight: 600; color: white;">${sanitizeHTML(item.name)}</div>
+                            <div style="font-size: 0.8rem; color: var(--light-moss);">x${item.qty}</div>
+                        </div>
+                        <div style="color: var(--dappled-gold); font-weight: 600;">
+                            ${(item.subtotal || item.price * item.qty).toLocaleString()} ฿
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            content.innerHTML = `
+                <div style="margin-bottom: 20px;">
+                    <div style="font-size: 1.2rem; font-weight: 700; color: var(--dappled-gold);">${sanitizeHTML(order.orderId)}</div>
+                    <div style="font-size: 0.85rem; color: var(--light-moss); opacity: 0.7;">${orderDate}</div>
+                </div>
+
+                ${timelineHTML}
+                ${trackingHTML}
+
+                <div style="margin-top: 20px;">
+                    <div style="font-weight: 700; color: var(--light-moss); margin-bottom: 10px; font-size: 0.9rem;">
+                        <i class="fa-solid fa-box"></i> รายการสินค้า
+                    </div>
+                    ${itemsHTML}
+                </div>
+
+                <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <span style="color: var(--light-moss);">ยอดรวมสินค้า</span>
+                        <span style="color: white;">${(order.subtotal || 0).toLocaleString()} ฿</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <span style="color: var(--light-moss);">ค่าจัดส่ง</span>
+                        <span style="color: white;">${(order.shipping || 100).toLocaleString()} ฿</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 1.2rem; font-weight: 700;">
+                        <span style="color: white;">ยอดรวมทั้งหมด</span>
+                        <span style="color: var(--dappled-gold);">${(order.total || 0).toLocaleString()} ฿</span>
+                    </div>
+                </div>
+
+                ${order.deliveryInfo ? `
+                    <div style="margin-top: 20px; padding: 15px; background: rgba(255,255,255,0.03); border-radius: 12px;">
+                        <div style="font-weight: 700; color: var(--light-moss); margin-bottom: 10px; font-size: 0.9rem;">
+                            <i class="fa-solid fa-location-dot"></i> ที่อยู่จัดส่ง
+                        </div>
+                        <div style="color: white; font-size: 0.9rem;">${sanitizeHTML(order.deliveryInfo.name)}</div>
+                        <div style="color: var(--light-moss); font-size: 0.85rem;">${sanitizeHTML(order.deliveryInfo.phone)}</div>
+                        <div style="color: var(--light-moss); font-size: 0.85rem; margin-top: 5px;">${sanitizeHTML(order.deliveryInfo.address)}</div>
+                    </div>
+                ` : ''}
+            `;
+        } catch (err) {
+            console.error('Error loading order detail:', err);
+            content.innerHTML = `<p style="color: #ff6b6b;">เกิดข้อผิดพลาดในการโหลดข้อมูล</p>`;
+        }
+    };
+
+    /**
      * ฟังก์ชันออกจากระบบ
      * - ล้างข้อมูลผู้ใช้จาก sessionStorage
      * - ล้างข้อมูลจัดส่ง
@@ -936,11 +1125,16 @@
             const card = document.createElement('div');
             card.className = 'product-card glass';
             card.setAttribute('data-product-id', p.id);
+            // Make card clickable to open product detail
+            card.onclick = (e) => {
+                if (e.target.closest('.add-to-cart-btn') || e.target.closest('.wishlist-heart-btn')) return;
+                window.openProductDetail(p.id);
+            };
             card.innerHTML = `
                 <div class="product-image">
                     ${isOutOfStock ? '<div class="out-of-stock-badge">หมดชั่วคราว</div>' : ''}
                     ${statusBadges ? `<div class="product-badges-stack">${statusBadges}</div>` : ''}
-                    <button class="wishlist-heart-btn ${inWishlist ? 'active' : ''}" onclick="window.toggleWishlist(${p.id})">
+                    <button class="wishlist-heart-btn ${inWishlist ? 'active' : ''}" onclick="event.stopPropagation(); window.toggleWishlist(${p.id})">
                         <i class="fa-${inWishlist ? 'solid' : 'regular'} fa-heart"></i>
                     </button>
                     <img src="${p.image}" alt="${p.name}" class="${isOutOfStock ? 'grayscale' : ''}" onerror="this.src='https://placehold.co/400x400?text=No+Image'">
@@ -954,7 +1148,7 @@
                     <div style="display: flex; justify-content: space-between; align-items: flex-end;">
                         <span class="product-price">${(p.price || 0).toLocaleString()} ฿</span>
                         ${!isOutOfStock ? `
-                        <button class="add-to-cart-btn" onclick="window.addToCart(${p.id})">
+                        <button class="add-to-cart-btn" onclick="event.stopPropagation(); window.addToCart(${p.id})">
                             <i class="fa-solid fa-cart-plus"></i>
                         </button>
                         ` : ''}
@@ -1900,6 +2094,28 @@
                         </div>
                         <div style="font-size: 0.75rem; color: var(--light-moss); margin-top: 8px;">
                             ${order.items?.length || 0} รายการ | ${order.items?.reduce((sum, i) => sum + (i.qty || 0), 0) || 0} ชิ้น
+                            ${order.trackingNumber ? `<br><i class="fa-solid fa-barcode"></i> ${sanitizeHTML(order.trackingNumber)}` : ''}
+                        </div>
+                        
+                        <!-- Admin Controls -->
+                        <div class="order-admin-controls">
+                            <select class="order-status-select" data-order-status="${order.orderId}">
+                                <option value="pending_payment" ${order.status === 'pending_payment' ? 'selected' : ''}>⏳ รอชำระเงิน</option>
+                                <option value="paid" ${order.status === 'paid' ? 'selected' : ''}>💳 ชำระแล้ว</option>
+                                <option value="shipped" ${order.status === 'shipped' ? 'selected' : ''}>📦 จัดส่งแล้ว</option>
+                                <option value="completed" ${order.status === 'completed' ? 'selected' : ''}>✅ สำเร็จ</option>
+                                <option value="cancelled" ${order.status === 'cancelled' ? 'selected' : ''}>❌ ยกเลิก</option>
+                            </select>
+                            <input type="text" class="order-tracking-input" 
+                                data-order-tracking="${order.orderId}" 
+                                placeholder="เลขพัสดุ" 
+                                value="${order.trackingNumber || ''}">
+                            <button class="order-save-btn" onclick="window.saveOrderUpdate('${order.orderId}')">
+                                <i class="fa-solid fa-save"></i> บันทึก
+                            </button>
+                            <button class="order-save-btn" style="background: rgba(220,53,69,0.8);" onclick="window.deleteOrder('${order.orderId}')">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
                         </div>
                     </div>
                 `;
@@ -2415,15 +2631,350 @@
                                 </button>
                             `}
                         </div>
-                    </div>
-                </div>
-            `;
+            </div>
+        `;
         }).join('');
     }
 
     // ==========================================
+    // PRODUCT GALLERY & LIGHTBOX SYSTEM
+    // ==========================================
+
+    let currentGalleryImages = [];
+    let currentGalleryIndex = 0;
+    let currentProductId = null;
+
+    /**
+     * Open product detail modal with gallery
+     * @param {number} productId - Product ID to display
+     */
+    window.openProductDetail = (productId) => {
+        const product = products.find(p => p && p.id === productId);
+        if (!product) return;
+
+        currentProductId = productId;
+        const modal = getEl('product-detail-modal');
+        if (!modal) return;
+
+        // Build images array - use images array if exists, otherwise use main image
+        currentGalleryImages = product.images && product.images.length > 0 
+            ? [...product.images] 
+            : [product.image];
+        currentGalleryIndex = 0;
+
+        // Update gallery
+        updateGalleryDisplay();
+        renderThumbnails();
+
+        // Update product info
+        const categoryEl = getEl('detail-category');
+        const nameEl = getEl('detail-name');
+        const badgesEl = getEl('detail-badges');
+        const stockEl = getEl('detail-stock');
+        const priceEl = getEl('detail-price');
+        const descEl = getEl('detail-description');
+        const addCartBtn = getEl('detail-add-cart-btn');
+        const wishlistBtn = getEl('detail-wishlist-btn');
+
+        if (categoryEl) categoryEl.textContent = (product.category || 'misc').toUpperCase();
+        if (nameEl) nameEl.textContent = product.name || 'สินค้า';
+
+        // Status badges
+        if (badgesEl) {
+            let badges = '';
+            if (product.isFeatured) badges += '<span class="product-text-badge badge-featured">⭐ แนะนำ</span>';
+            if (product.isBestSeller) badges += '<span class="product-text-badge badge-bestseller">🔥 ขายดี</span>';
+            if (product.isNew) badges += '<span class="product-text-badge badge-new">✨ ใหม่</span>';
+            badgesEl.innerHTML = badges;
+        }
+
+        // Stock
+        const isOutOfStock = product.stock <= 0;
+        if (stockEl) {
+            stockEl.innerHTML = `<span style="color: ${isOutOfStock ? '#ff6b6b' : '#40916c'}">คงเหลือ: ${product.stock || 0} ชิ้น</span>`;
+        }
+
+        // Price
+        if (priceEl) priceEl.textContent = `${(product.price || 0).toLocaleString()} ฿`;
+
+        // Description
+        if (descEl) {
+            descEl.innerHTML = `<p>${sanitizeHTML(product.description || 'สินค้าคุณภาพจาก Siwabeetle Shop')}</p>`;
+        }
+
+        // Add to cart button
+        if (addCartBtn) {
+            if (isOutOfStock) {
+                addCartBtn.innerHTML = '<i class="fa-solid fa-bell"></i> แจ้งเตือนเมื่อมีสินค้า';
+                addCartBtn.onclick = () => window.openNotifyModal(productId);
+                addCartBtn.style.background = 'rgba(255,255,255,0.1)';
+            } else {
+                addCartBtn.innerHTML = '<i class="fa-solid fa-cart-plus"></i> เพิ่มลงตะกร้า';
+                addCartBtn.onclick = () => {
+                    window.addToCart(productId);
+                    closeProductDetail();
+                };
+                addCartBtn.style.background = '';
+            }
+        }
+
+        // Wishlist button
+        if (wishlistBtn) {
+            const inWishlist = isInWishlist(productId);
+            wishlistBtn.className = `btn-wishlist-detail ${inWishlist ? 'active' : ''}`;
+            wishlistBtn.innerHTML = `<i class="fa-${inWishlist ? 'solid' : 'regular'} fa-heart"></i>`;
+            wishlistBtn.onclick = () => {
+                window.toggleWishlist(productId);
+                const nowInWishlist = isInWishlist(productId);
+                wishlistBtn.className = `btn-wishlist-detail ${nowInWishlist ? 'active' : ''}`;
+                wishlistBtn.innerHTML = `<i class="fa-${nowInWishlist ? 'solid' : 'regular'} fa-heart"></i>`;
+            };
+        }
+
+        modal.classList.add('active');
+    };
+
+    /**
+     * Close product detail modal
+     */
+    window.closeProductDetail = () => {
+        const modal = getEl('product-detail-modal');
+        if (modal) modal.classList.remove('active');
+        currentProductId = null;
+    };
+
+    /**
+     * Update gallery main image display
+     */
+    function updateGalleryDisplay() {
+        const mainImg = getEl('gallery-main-img');
+        const counter = getEl('gallery-counter');
+
+        if (mainImg && currentGalleryImages.length > 0) {
+            mainImg.src = currentGalleryImages[currentGalleryIndex];
+            mainImg.onerror = () => { mainImg.src = 'https://placehold.co/400x400?text=No+Image'; };
+        }
+
+        if (counter) {
+            counter.textContent = `${currentGalleryIndex + 1} / ${currentGalleryImages.length}`;
+        }
+
+        // Update thumbnail active state
+        document.querySelectorAll('.gallery-thumb').forEach((thumb, i) => {
+            thumb.classList.toggle('active', i === currentGalleryIndex);
+        });
+    }
+
+    /**
+     * Render gallery thumbnails
+     */
+    function renderThumbnails() {
+        const container = getEl('gallery-thumbnails');
+        if (!container) return;
+
+        if (currentGalleryImages.length <= 1) {
+            container.innerHTML = '';
+            return;
+        }
+
+        container.innerHTML = currentGalleryImages.map((img, i) => `
+            <div class="gallery-thumb ${i === 0 ? 'active' : ''}" onclick="window.selectGalleryImage(${i})">
+                <img src="${img}" alt="Thumbnail ${i + 1}" onerror="this.src='https://placehold.co/70x70?text=?'">
+            </div>
+        `).join('');
+    }
+
+    /**
+     * Select gallery image by index
+     */
+    window.selectGalleryImage = (index) => {
+        if (index >= 0 && index < currentGalleryImages.length) {
+            currentGalleryIndex = index;
+            updateGalleryDisplay();
+        }
+    };
+
+    /**
+     * Navigate gallery (prev/next)
+     */
+    window.navigateGallery = (direction) => {
+        if (currentGalleryImages.length <= 1) return;
+        currentGalleryIndex = (currentGalleryIndex + direction + currentGalleryImages.length) % currentGalleryImages.length;
+        updateGalleryDisplay();
+    };
+
+    /**
+     * Open lightbox with current image
+     */
+    window.openLightbox = () => {
+        const modal = getEl('lightbox-modal');
+        const img = getEl('lightbox-img');
+        const counter = getEl('lightbox-counter');
+
+        if (!modal || !img) return;
+
+        img.src = currentGalleryImages[currentGalleryIndex];
+        if (counter) counter.textContent = `${currentGalleryIndex + 1} / ${currentGalleryImages.length}`;
+
+        modal.classList.add('active');
+    };
+
+    /**
+     * Close lightbox
+     */
+    window.closeLightbox = () => {
+        const modal = getEl('lightbox-modal');
+        if (modal) modal.classList.remove('active');
+    };
+
+    /**
+     * Navigate lightbox (prev/next)
+     */
+    window.navigateLightbox = (direction) => {
+        if (currentGalleryImages.length <= 1) return;
+        currentGalleryIndex = (currentGalleryIndex + direction + currentGalleryImages.length) % currentGalleryImages.length;
+
+        const img = getEl('lightbox-img');
+        const counter = getEl('lightbox-counter');
+
+        if (img) img.src = currentGalleryImages[currentGalleryIndex];
+        if (counter) counter.textContent = `${currentGalleryIndex + 1} / ${currentGalleryImages.length}`;
+
+        // Also update main gallery
+        updateGalleryDisplay();
+    };
+
+    // Keyboard navigation for lightbox
+    document.addEventListener('keydown', (e) => {
+        const lightbox = getEl('lightbox-modal');
+        if (!lightbox || !lightbox.classList.contains('active')) return;
+
+        if (e.key === 'Escape') window.closeLightbox();
+        if (e.key === 'ArrowLeft') window.navigateLightbox(-1);
+        if (e.key === 'ArrowRight') window.navigateLightbox(1);
+    });
+
+    // ==========================================
+    // ORDER TRACKING - ADMIN CONTROLS
+    // ==========================================
+
+    /**
+     * Update order status (Admin only)
+     * @param {string} orderId - Order ID
+     * @param {string} newStatus - New status value
+     */
+    window.updateOrderStatus = async (orderId, newStatus) => {
+        if (!userProfile || userProfile.username?.toLowerCase() !== 'siwakon') {
+            showToast('ไม่มีสิทธิ์เข้าถึง', 'error');
+            return;
+        }
+
+        try {
+            await database.ref('orders/' + orderId + '/status').set(newStatus);
+            await database.ref('orders/' + orderId + '/statusUpdatedAt').set(new Date().toISOString());
+
+            // Also update in user's order history
+            const orderSnapshot = await database.ref('orders/' + orderId).once('value');
+            const order = orderSnapshot.val();
+            if (order && order.userId) {
+                await database.ref('users/' + order.userId + '/orders/' + orderId + '/status').set(newStatus);
+            }
+
+            showToast('อัปเดตสถานะเรียบร้อย');
+        } catch (err) {
+            console.error('Error updating order status:', err);
+            showToast('เกิดข้อผิดพลาด', 'error');
+        }
+    };
+
+    /**
+     * Update tracking number (Admin only)
+     * @param {string} orderId - Order ID
+     * @param {string} trackingNumber - Tracking number
+     */
+    window.updateTrackingNumber = async (orderId, trackingNumber) => {
+        if (!userProfile || userProfile.username?.toLowerCase() !== 'siwakon') {
+            showToast('ไม่มีสิทธิ์เข้าถึง', 'error');
+            return;
+        }
+
+        try {
+            await database.ref('orders/' + orderId + '/trackingNumber').set(trackingNumber);
+            await database.ref('orders/' + orderId + '/trackingUpdatedAt').set(new Date().toISOString());
+
+            showToast('บันทึกเลขพัสดุเรียบร้อย');
+        } catch (err) {
+            console.error('Error updating tracking number:', err);
+            showToast('เกิดข้อผิดพลาด', 'error');
+        }
+    };
+
+    /**
+     * Save order updates (status + tracking) from admin panel
+     */
+    window.saveOrderUpdate = async (orderId) => {
+        const statusSelect = document.querySelector(`[data-order-status="${orderId}"]`);
+        const trackingInput = document.querySelector(`[data-order-tracking="${orderId}"]`);
+
+        if (!statusSelect) return;
+
+        const newStatus = statusSelect.value;
+        const trackingNumber = trackingInput ? trackingInput.value.trim() : '';
+
+        try {
+            await window.updateOrderStatus(orderId, newStatus);
+            if (trackingNumber) {
+                await window.updateTrackingNumber(orderId, trackingNumber);
+            }
+        } catch (err) {
+            console.error('Error saving order update:', err);
+        }
+    };
+
+    /**
+     * Delete order (Admin only)
+     * @param {string} orderId - Order ID to delete
+     */
+    window.deleteOrder = async (orderId) => {
+        if (!userProfile || userProfile.username?.toLowerCase() !== 'siwakon') {
+            showToast('ไม่มีสิทธิ์เข้าถึง', 'error');
+            return;
+        }
+
+        if (!confirm(`คุณต้องการลบคำสั่งซื้อ ${orderId} ใช่หรือไม่?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้`)) {
+            return;
+        }
+
+        try {
+            // Get order to find userId
+            const orderSnapshot = await database.ref('orders/' + orderId).once('value');
+            const order = orderSnapshot.val();
+
+            // Delete from main orders
+            await database.ref('orders/' + orderId).remove();
+
+            // Delete from user's order history if exists
+            if (order && order.userId) {
+                await database.ref('users/' + order.userId + '/orders/' + orderId).remove();
+            }
+
+            showToast('ลบคำสั่งซื้อเรียบร้อย');
+
+            // Refresh the orders tab
+            const container = document.querySelector('#admin-product-list');
+            if (container && currentAdminTab === 'orders') {
+                await renderOrdersTab(container);
+            }
+        } catch (err) {
+            console.error('Error deleting order:', err);
+            showToast('เกิดข้อผิดพลาดในการลบ', 'error');
+        }
+    };
+
+    // ==========================================
     // ADDITIONAL EVENT LISTENERS FOR NEW FEATURES
     // ==========================================
+
 
     // Add to setupEventListeners or call separately
     const wishlistTrigger = getEl('wishlist-trigger');
@@ -2445,6 +2996,26 @@
     const closeOrderDetail = getEl('close-order-detail');
     if (closeOrderDetail) {
         closeOrderDetail.addEventListener('click', () => getEl('order-detail-modal')?.classList.remove('active'));
+    }
+
+    // Product Detail Modal - close when clicking outside
+    const productDetailModal = getEl('product-detail-modal');
+    if (productDetailModal) {
+        productDetailModal.addEventListener('click', (e) => {
+            if (e.target === productDetailModal) {
+                window.closeProductDetail();
+            }
+        });
+    }
+
+    // Lightbox Modal - close when clicking outside
+    const lightboxModal = getEl('lightbox-modal');
+    if (lightboxModal) {
+        lightboxModal.addEventListener('click', (e) => {
+            if (e.target === lightboxModal || e.target.classList.contains('lightbox-content')) {
+                window.closeLightbox();
+            }
+        });
     }
 
     // Start

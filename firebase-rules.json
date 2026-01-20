@@ -12,11 +12,11 @@
         },
         "users": {
             "$uid": {
-                ".read": "auth != null && auth.uid == $uid",
-                ".write": "auth != null && auth.uid == $uid",
+                ".read": "auth != null && (auth.uid == $uid || root.child('admins').child(auth.uid).exists())",
+                ".write": "auth != null && (auth.uid == $uid || root.child('admins').child(auth.uid).exists())",
                 "orders": {
-                    ".read": "auth != null && auth.uid == $uid",
-                    ".write": "auth != null && auth.uid == $uid",
+                    ".read": "auth != null && (auth.uid == $uid || root.child('admins').child(auth.uid).exists())",
+                    ".write": "auth != null && (auth.uid == $uid || root.child('admins').child(auth.uid).exists())",
                     ".indexOn": [
                         "createdAt"
                     ]
@@ -36,7 +36,7 @@
             "$orderId": {
                 ".read": "auth != null && (data.child('userId').val() == auth.uid || root.child('admins').child(auth.uid).exists())",
                 ".write": "auth != null && (!data.exists() || data.child('userId').val() == auth.uid || root.child('admins').child(auth.uid).exists())",
-                ".validate": "newData.hasChildren(['orderId', 'userId', 'items', 'total', 'createdAt'])"
+                ".validate": "!newData.exists() || newData.hasChildren(['orderId', 'userId', 'items', 'total', 'createdAt'])"
             }
         },
         "stockNotifications": {

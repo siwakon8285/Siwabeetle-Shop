@@ -449,6 +449,74 @@
         </div>
     </div>
 
+    <!-- Product Detail Modal -->
+    <div class="modal" id="product-detail-modal">
+        <div class="product-detail-container glass">
+            <button class="close-modal-btn" onclick="closeProductDetail()">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            <div class="product-detail-layout">
+                <!-- Gallery Section -->
+                <div class="product-gallery-section">
+                    <div class="gallery-main-image" onclick="openLightbox()">
+                        <img id="gallery-main-img" src="" alt="Product Image">
+                        <div class="zoom-hint">
+                            <i class="fa-solid fa-search-plus"></i> คลิกเพื่อขยาย
+                        </div>
+                    </div>
+                    <div class="gallery-thumbnails" id="gallery-thumbnails">
+                        <!-- Thumbnails will be injected here -->
+                    </div>
+                    <div class="gallery-nav">
+                        <button class="gallery-nav-btn" onclick="navigateGallery(-1)">
+                            <i class="fa-solid fa-chevron-left"></i>
+                        </button>
+                        <span id="gallery-counter">1 / 1</span>
+                        <button class="gallery-nav-btn" onclick="navigateGallery(1)">
+                            <i class="fa-solid fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
+                <!-- Info Section -->
+                <div class="product-detail-info">
+                    <span class="product-detail-category" id="detail-category"></span>
+                    <h2 class="product-detail-name" id="detail-name"></h2>
+                    <div class="product-detail-badges" id="detail-badges"></div>
+                    <div class="product-detail-stock" id="detail-stock"></div>
+                    <div class="product-detail-price" id="detail-price"></div>
+                    <div class="product-detail-description" id="detail-description">
+                        <p>สินค้าคุณภาพจาก Siwabeetle Shop</p>
+                    </div>
+                    <div class="product-detail-actions">
+                        <button class="btn-primary detail-add-cart" id="detail-add-cart-btn">
+                            <i class="fa-solid fa-cart-plus"></i> เพิ่มลงตะกร้า
+                        </button>
+                        <button class="btn-wishlist-detail" id="detail-wishlist-btn">
+                            <i class="fa-regular fa-heart"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lightbox Modal -->
+    <div class="modal lightbox-modal" id="lightbox-modal">
+        <button class="lightbox-close" onclick="closeLightbox()">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+        <button class="lightbox-nav lightbox-prev" onclick="navigateLightbox(-1)">
+            <i class="fa-solid fa-chevron-left"></i>
+        </button>
+        <div class="lightbox-content">
+            <img id="lightbox-img" src="" alt="Full Size Image">
+        </div>
+        <button class="lightbox-nav lightbox-next" onclick="navigateLightbox(1)">
+            <i class="fa-solid fa-chevron-right"></i>
+        </button>
+        <div class="lightbox-counter" id="lightbox-counter">1 / 1</div>
+    </div>
+
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
