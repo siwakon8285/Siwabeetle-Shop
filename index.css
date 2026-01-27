@@ -1733,16 +1733,15 @@ footer {
     position: relative;
     display: flex;
     align-items: center;
-    background: #ffffff;
+    background: rgba(255, 255, 255, 0.05);
     border: 1px solid var(--glass-border);
     border-radius: 100px;
     padding: 8px 15px;
     transition: var(--transition);
-    width: 300px;
-    opacity: 1;
-    margin-right: 10px;
-    pointer-events: auto;
-    overflow: visible;
+    width: 0;
+    opacity: 0;
+    pointer-events: none;
+    overflow: hidden;
 }
 
 .search-wrapper.active {
@@ -1777,15 +1776,14 @@ footer {
 
 .search-toggle-btn {
     transition: var(--transition);
-    display: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .search-toggle-btn.active {
     background: var(--moss-green);
     border-color: var(--light-moss);
-    display: flex;
-    align-items: center;
-    justify-content: center;
 }
 
 .search-results {
