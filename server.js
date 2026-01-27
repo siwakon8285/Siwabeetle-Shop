@@ -8,6 +8,7 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const crypto = require('crypto');
 const db = require('./db');
 require('dotenv').config();
 
@@ -17,6 +18,119 @@ const PORT = process.env.PORT || 5000;
 // ==========================================
 // SECURITY MIDDLEWARE
 // ==========================================
+
+// ==========================================
+// ADVANCED SECURITY MIDDLEWARE
+// ==========================================
+
+// IP Blocking System
+const blockedIPs = new Set();
+const suspiciousIPs = new Map(); // Track suspicious activity
+
+// Fraud Detection - Track user patterns
+const userOrderPatterns = new Map();
+
+// Data Encryption Helper
+function encryptSensitiveData(data) {
+    const algorithm = 'aes-256-cbc';
+    const key = crypto.scryptSync(process.env.ENCRYPTION_KEY || 'default-key', 'salt', 32);
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv(algorithm, key, iv);
+    let encrypted = cipher.update(data, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    return { encrypted, iv: iv.toString('hex') };
+}
+
+function decryptSensitiveData(encryptedData, iv) {
+    const algorithm = 'aes-256-cbc';
+    const key = crypto.scryptSync(process.env.ENCRYPTION_KEY || 'default-key', 'salt', 32);
+    const decipher = crypto.createDecipheriv(algorithm, key, Buffer.from(iv, 'hex'));
+    let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+}
+
+// Advanced Rate Limiting with IP Tracking
+const advancedRateLimiter = (options) => {
+    return (req, res, next) => {
+        const clientIP = req.ip || req.connection.remoteAddress;
+        
+        // Check if IP is blocked
+        if (blockedIPs.has(clientIP)) {
+            return res.status(403).json({ message: 'IP address blocked' });
+        }
+        
+        // Track suspicious activity
+        if (!suspiciousIPs.has(clientIP)) {
+            suspiciousIPs.set(clientIP, { count: 0, lastActivity: Date.now() });
+        }
+        
+        const ipData = suspiciousIPs.get(clientIP);
+        ipData.count++;
+        ipData.lastActivity = Date.now();
+        
+        // Auto-block suspicious IPs
+        if (ipData.count > 50) { // More than 50 requests
+            blockedIPs.add(clientIP);
+            console.log(`IP Blocked: ${clientIP} - Too many requests`);
+            return res.status(403).json({ message: 'IP address blocked due to suspicious activity' });
+        }
+        
+        next();
+    };
+};
+
+// Fraud Detection Middleware
+const fraudDetection = (req, res, next) => {
+    if (req.path === '/api/orders' && req.method === 'POST') {
+        const clientIP = req.ip || req.connection.remoteAddress;
+        const orderData = req.body;
+        
+        // Check for suspicious patterns
+        const suspiciousPatterns = [
+            // Multiple orders from same IP in short time
+            () => {
+                const userPattern = userOrderPatterns.get(clientIP) || [];
+                const recentOrders = userPattern.filter(order => 
+                    Date.now() - order.timestamp < 60000 // Last 1 minute
+                );
+                return recentOrders.length > 3;
+            },
+            // Unusually high order amount
+            () => orderData.totalAmount > 50000,
+            // Suspicious order patterns
+            () => orderData.items && orderData.items.length > 10
+        ];
+        
+        const isSuspicious = suspiciousPatterns.some(check => check());
+        
+        if (isSuspicious) {
+            console.warn(`Suspicious order detected from IP: ${clientIP}`, orderData);
+            // Log to database for admin review
+            db.query(
+                'INSERT INTO suspicious_orders (ip_address, order_data, created_at) VALUES ($1, $2, NOW())',
+                [clientIP, JSON.stringify(orderData)]
+            ).catch(err => console.error('Failed to log suspicious order:', err));
+            
+            // Could implement additional verification here
+            return res.status(403).json({ 
+                message: 'Order flagged for review. Please contact support.' 
+            });
+        }
+        
+        // Track order pattern
+        if (!userOrderPatterns.has(clientIP)) {
+            userOrderPatterns.set(clientIP, []);
+        }
+        userOrderPatterns.get(clientIP).push({
+            timestamp: Date.now(),
+            amount: orderData.totalAmount,
+            itemCount: orderData.items?.length || 0
+        });
+    }
+    
+    next();
+};
 
 // Helmet - ตั้งค่า HTTP security headers
 app.use(helmet({
@@ -44,6 +158,10 @@ const authLimiter = rateLimit({
 
 // ใช้ rate limiting กับทุก API
 app.use('/api/', apiLimiter);
+
+// Apply advanced security middleware
+app.use(advancedRateLimiter());
+app.use(fraudDetection);
 
 // ==========================================
 // BASIC MIDDLEWARE
